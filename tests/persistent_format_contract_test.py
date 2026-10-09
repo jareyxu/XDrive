@@ -135,7 +135,7 @@ class PersistentFormatContractTests(unittest.TestCase):
                     self.assertIn(write, versions, name)
         self.assertEqual(self.matrix["status"], "release-approved")
         approval = self.matrix["releaseApproval"]
-        self.assertEqual(approval["version"], "v1.3.2")
+        self.assertEqual(approval["version"], "v1.3.3")
         self.assertRegex(approval["reviewedAt"], r"^\d{4}-\d{2}-\d{2}$")
         self.assertTrue(approval["reviewer"].strip())
         self.assertTrue(approval["evidence"])
