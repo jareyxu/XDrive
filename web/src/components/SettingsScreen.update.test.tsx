@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { APIError } from '../api/api-error'
 
 const api = vi.hoisted(() => ({
   fetchStorageUsage: vi.fn(),
@@ -32,7 +33,7 @@ beforeEach(() => {
   api.fetchSystemUpdateStatus.mockResolvedValue({ id: 'abcdefghijklmnopqrstu_', version: 'v1.4.0', state: 'succeeded', updatedAt: 2 })
 })
 
-afterEach(() => vi.clearAllMocks())
+afterEach(() => { cleanup(); vi.clearAllMocks() })
 
 it('checks a release, asks for confirmation, and reports the completed server update', async () => {
   const user = userEvent.setup()
@@ -47,4 +48,18 @@ it('checks a release, asks for confirmation, and reports the completed server up
   expect(api.startSystemUpdate).toHaveBeenCalledWith('v1.4.0', expect.any(AbortSignal))
   expect((await screen.findByText('更新完成，请刷新页面载入新版界面。')).textContent).toBe('更新完成，请刷新页面载入新版界面。')
   expect(api.fetchSystemUpdateStatus).toHaveBeenCalledWith('abcdefghijklmnopqrstu_', expect.any(AbortSignal))
+})
+
+
+it('shows actionable server guidance when an update request is rejected', async () => {
+  const user = userEvent.setup()
+  api.startSystemUpdate.mockRejectedValueOnce(new APIError(409, 'release_changed'))
+  render(<SettingsScreen now={Date.now()} revision={0} onChangePassword={() => undefined} passwordDisabled={false} />)
+
+  await user.click(screen.getByRole('button', { name: '检查更新' }))
+  await screen.findByRole('link', { name: 'v1.4.0' })
+  await user.click(screen.getByRole('button', { name: '安装 v1.4.0' }))
+  await user.click(screen.getByRole('button', { name: '确认更新' }))
+
+  expect(await screen.findByText(/GitHub 最新稳定版已变化/)).not.toBeNull()
 })

@@ -1,4 +1,5 @@
 import { RequestIdControl } from './RequestIdControl'
+import { APIError } from '../api/api-error'
 import { useErrorNotice } from './use-error-notice'
 import { useEffect, useState } from 'react'
 import { fetchStorageUsage, fetchSystemInfo, fetchSystemUpdateInfo, fetchSystemUpdateStatus, startSystemUpdate, type StorageUsage, type SystemInfo, type SystemUpdateInfo, type SystemUpdateStatus } from '../api/client'
@@ -73,8 +74,8 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
     setConfirmUpdate(false)
     try {
       setUpdateInfo(await fetchSystemUpdateInfo(AbortSignal.timeout(25000)))
-    } catch {
-      setUpdateError('无法连接 GitHub 获取正式版信息。请确认服务器网络正常后重试。')
+    } catch (cause) {
+      setUpdateError(cause instanceof APIError ? cause.message : '无法连接 GitHub 获取正式版信息。请确认服务器网络正常后重试。')
     } finally {
       setCheckingUpdates(false)
     }
@@ -85,8 +86,8 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
     setConfirmUpdate(false)
     try {
       setUpdateStatus(await startSystemUpdate(updateInfo.latestVersion, AbortSignal.timeout(15000)))
-    } catch {
-      setUpdateError('无法启动更新。请重新检查版本，或查看服务器服务日志。')
+    } catch (cause) {
+      setUpdateError(cause instanceof APIError ? cause.message : '无法启动更新。请重新检查版本，或查看服务器服务日志。')
     }
   }
   const updateStateText = (state: SystemUpdateStatus['state']) => ({ queued: '已排队，等待服务器启动更新任务…', checking: '正在确认正式版信息…', downloading: '正在下载并校验发布包…', installing: '正在安装。XDrive 服务会短暂重启…', succeeded: '更新完成，请刷新页面载入新版界面。', failed: '更新没有完成。' })[state]
