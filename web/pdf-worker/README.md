@@ -8,4 +8,4 @@ Large complete-data repair is unsupported and must present original-file downloa
 
 For an upstream update, review the actual new Worker internals, license and each adapted call site, then deliberately update the pinned hash and exact dependency version. Run dense/sparse boundary, range grouping, real small repair, large non-linearized rendering, cache eviction, cancellation and release asset tests. Merely replacing the digest until the build passes is not a compatibility review.
 
-The old `docs/spikes/fixtures/pdf-sparse` entries reexport this implementation for historical tooling. No production runtime imports from documentation. See ADR-083 through ADR-089 for measurements, failures, limits and provenance.
+The worker runtime is built from this directory and the pinned PDF.js dependency; production code does not import experimental spike fixtures.

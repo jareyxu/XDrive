@@ -37,7 +37,6 @@ scripts-check:
 	python3 tests/install_preflight_test.py
 	python3 tests/install_completion_test.py
 	python3 tests/upgrade_test.py
-	python3 tests/requirements_traceability_contract_test.py
 	python3 -c 'import ast, pathlib; ast.parse(pathlib.Path("scripts/backup_resource_check.py").read_text())'
 
 # Optional validation only; Docker is not the deployment architecture.

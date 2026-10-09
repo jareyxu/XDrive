@@ -19,15 +19,19 @@ coverage/
 
 # Local validation logs, browser traces, VM state, and generated fixtures
 /output/
-# Local test evidence and generated browser/resource validation artifacts.
-/docs/operations/artifacts/
-# Internal design, planning, and verification documents are kept locally.
-# This applies to new files only; already-tracked docs still need explicit staging control.
-/docs/
+# Internal design decisions, spikes, and verification records stay local.
+/docs/adr/
+/docs/operations/
+/docs/spikes/
+/docs/acceptance-status-2026-10-05.md
+/docs/format-freeze-audit-2026-10-07.md
+/docs/requirements-traceability.md
 # Internal implementation plan; keep it in the local workspace only.
 /plan.md
+# Internal implementation history; keep it in the local workspace only.
+/IMPLEMENTATION-HISTORY.md
 # New verification-only sources and reports remain in this local workspace.
-# Existing tracked tests are still tracked; keep their changes out of commits explicitly.
+# Product and protocol tests remain tracked; internal-only traceability checks stay local.
 /internal/backup/backup_resource_test.go
 /internal/server/maintenance_recycle_test.go
 /internal/server/system_update_test.go
