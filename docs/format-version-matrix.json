@@ -2,18 +2,16 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v1.3.2",
+    "version": "v1.3.3",
     "reviewedAt": "2026-10-09",
     "reviewer": "Release maintainer; persistent/client format delta review",
     "evidence": [
-      "The user explicitly requested publication of stable v1.3.2.",
-      "The v1.3.2 diff from v1.3.1 adds the settings-page release updater and root-managed update worker; it does not change encrypted payload formats, key derivation, metadata transaction protocol, SQLite schema, backup container format, or client mutation protocol.",
-      "The previous user-attested compatibility rehearsal and format reviews are carried forward only for these unchanged persistent/client format contracts. This approval does not claim an independent security review of the new updater.",
-      "The v1.3.2 source includes updater implementation commit bc88108a0e8fbb078b626db71051e53b6a752092, release metadata commit 6596dff, and updater API error-guidance fix commit f507482, plus this release-gate evidence update.",
-      "These changes leave persisted data formats and client mutation contracts unchanged from v1.3.1. This approval carries forward only the prior compatibility evidence and does not claim an independent security review of the new updater."
+      "The v1.3.3 source diff from v1.3.2 (through source commit 252f1e09a158) was reviewed. It changes file-list presentation and repository maintenance files only; it does not modify encrypted payloads, key derivation, AAD, metadata transactions, SQLite schema, backup format, or client mutation protocol.",
+      "The previously user-confirmed backup/restore and format-compatibility evidence is carried forward for these unchanged persistence and client-format contracts. This approval does not claim a new independent security review.",
+      "The user requested packaging and publication of stable v1.3.3. The release changes are bounded to the reviewed UI polish and housekeeping commits 035ffb8 and 252f1e0."
     ]
   },
-  "scope": "XDrive V1.3.2 persistent and client mutation formats, unchanged from V1.3.1",
+  "scope": "XDrive V1.3.3 persistent and client mutation formats, unchanged from V1.3.2",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,
