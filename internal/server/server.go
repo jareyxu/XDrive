@@ -68,6 +68,10 @@ type Handler struct {
 	updateCacheMu        sync.Mutex
 	updateCache          update.Release
 	updateCacheAt        time.Time
+	backupTicketMu       sync.Mutex
+	backupTickets        map[[32]byte]backupDownloadTicket
+	backupExportMu       sync.Mutex
+	backupPreparer       BackupArchivePreparer
 	// uploadPublishedHook is an unexported fault-injection point for same-package
 	// crash tests. Production handlers leave it nil.
 	uploadPublishedHook func()
@@ -294,6 +298,12 @@ func NewWithBuild(cfg config.Config, version, commit string) (*Handler, error) {
 		}
 		storageUsage(w, r, database, cfg.QuotaBytes, cfg.StoragePath, cfg.BackupWarnAfterDays)
 	})
+	mux.HandleFunc("POST /api/v1/backups/download", func(w http.ResponseWriter, r *http.Request) {
+		handler.prepareBackupDownload(w, r, database)
+	})
+	mux.HandleFunc("GET /api/v1/backups/download", func(w http.ResponseWriter, r *http.Request) {
+		handler.downloadBackup(w, r, database, cfg)
+	})
 	mux.HandleFunc("GET /api/v1/trash/tombstones", func(w http.ResponseWriter, r *http.Request) {
 		if !validSession(r, database) {
 			writeError(w, http.StatusUnauthorized, "invalid_session")
@@ -468,6 +478,12 @@ func NewWithBuild(cfg config.Config, version, commit string) (*Handler, error) {
 
 func (h *Handler) TrashRetention() time.Duration { return h.trashRetention }
 func (h *Handler) MetadataKeepVersions() int     { return h.metadataKeepVersions }
+
+// SetBackupArchivePreparer connects the CLI-owned backup package to the HTTP
+// handler without coupling the server package back to that package.
+func (h *Handler) SetBackupArchivePreparer(preparer BackupArchivePreparer) {
+	h.backupPreparer = preparer
+}
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.lifecycleMutex.Lock()

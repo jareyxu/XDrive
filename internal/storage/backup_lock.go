@@ -23,6 +23,13 @@ func AcquireBackupLease(ctx context.Context, storagePath string) (*BackupLease, 
 	return acquire(ctx, storagePath, unix.LOCK_EX, true)
 }
 
+// TryBackupLease returns nil when another process is already backing up or
+// deleting objects. Web-triggered exports use it to fail promptly instead of
+// keeping an interactive request open while waiting for an operator task.
+func TryBackupLease(storagePath string) (*BackupLease, error) {
+	return acquireWithOptions(context.Background(), storagePath, unix.LOCK_EX, false, true)
+}
+
 func AcquireDeletionLease(ctx context.Context, storagePath string) (*BackupLease, error) {
 	return acquire(ctx, storagePath, unix.LOCK_SH, true)
 }

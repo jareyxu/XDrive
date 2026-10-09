@@ -236,7 +236,17 @@ func runContext(args []string, operationContext context.Context) error {
 	if err != nil {
 		return err
 	}
+	handler.SetBackupArchivePreparer(func(ctx context.Context, settings config.Config) (server.BackupArchive, error) {
+		export, err := backup.PrepareArchive(ctx, settings)
+		if errors.Is(err, backup.ErrBackupInProgress) {
+			return nil, server.ErrBackupInProgress
+		}
+		return export, err
+	})
 	defer handler.Close()
+	if err := backup.CleanupArchiveStaging(settings); err != nil {
+		return err
+	}
 
 	httpServer := &http.Server{
 		Addr:              settings.ListenAddr,

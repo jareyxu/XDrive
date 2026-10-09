@@ -5,6 +5,11 @@ export function validRequestId(value: unknown): string | undefined {
 }
 
 const errorMessages: Readonly<Record<string, string>> = {
+  backup_download_in_progress: '备份下载准备请求过多，请稍等片刻后重试。',
+  backup_download_ticket_unavailable: '备份下载凭证已失效或已使用。请返回设置页重新发起下载。',
+  backup_export_failed: '备份未能完整生成，下载文件不可用于恢复。请稍后重试；若持续发生，请提供请求编号。',
+  backup_in_progress: '服务器正在执行其他备份或清理操作，请稍后再试。',
+  backup_unavailable: '当前服务器尚未启用网页备份。请联系管理员检查服务配置。',
   client_update_required: '当前页面版本已过期，请刷新页面后重试。',
   disk_space_low: '服务器可用磁盘空间不足，本次写入未完成。请联系管理员释放磁盘空间；之后刷新并查看任务状态，再重试。',
   disk_usage_unavailable: '暂时无法读取服务器可用磁盘空间，存储用量信息不完整。请稍后刷新存储页；若持续发生，请联系管理员并提供请求编号。',

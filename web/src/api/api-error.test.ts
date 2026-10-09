@@ -36,6 +36,13 @@ test('stale client protocol errors tell the user to reload the current page', as
   const error = await parseAPIError(failure({ error: 'client_update_required' }, first, 426))
   expect(error.message).toContain('刷新页面')
 })
+test('backup download errors explain retry and completeness requirements', () => {
+  expect(new APIError(429, 'backup_download_in_progress').message).toContain('请求过多')
+  expect(new APIError(401, 'backup_download_ticket_unavailable').message).toContain('重新发起下载')
+  expect(new APIError(500, 'backup_export_failed').message).toContain('不可用于恢复')
+  expect(new APIError(409, 'backup_in_progress').message).toContain('其他备份或清理操作')
+  expect(new APIError(503, 'backup_unavailable').message).toContain('联系管理员')
+})
 test('server integrity, storage, and maintenance failures give specific recovery guidance', () => {
   expect(new APIError(400, 'object_digest_mismatch').message).toContain('重新选择原文件')
   expect(new APIError(500, 'disk_usage_unavailable').message).toContain('联系管理员')

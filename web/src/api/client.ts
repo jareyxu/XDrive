@@ -787,6 +787,11 @@ export async function fetchStorageUsage(signal?: AbortSignal): Promise<StorageUs
   return usage
 }
 
+export async function prepareBackupDownload(signal?: AbortSignal): Promise<void> {
+  const result = await post<{ ready: boolean }>('/api/v1/backups/download', {}, true, undefined, signal)
+  if (result.ready !== true) throw new TypeError('服务器未准备好备份下载。')
+}
+
 interface VaultLoginResponse {
   readonly vaultConfig: VaultConfigV1
   readonly vaultMutationRevision: number
