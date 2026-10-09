@@ -246,7 +246,7 @@ archive="$temporary_dir/release.tar.gz"
 if [[ -n $bundle ]]; then
   cp -- "$bundle" "$archive"
 else
-  curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "$release_url"
+  curl --fail --location --proto '=https' --tlsv1.2 --max-filesize 134217728 --output "$archive" "$release_url"
 fi
 actual_digest=$(sha256sum "$archive" | awk '{ print $1 }')
 [[ $actual_digest == "$expected_digest" ]] || { printf 'Release SHA-256 mismatch.\n' >&2; exit 1; }

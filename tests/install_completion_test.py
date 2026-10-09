@@ -91,6 +91,9 @@ printf 'fixture certificate\\n' > "$TEST_LE_LIVE/drive.invalid/fullchain.pem"
 printf 'fixture key\\n' > "$TEST_LE_LIVE/drive.invalid/privkey.pem"''',
             "useradd": "exit 0",
             "chown": "exit 0",
+            "systemd-tmpfiles": '''[[ $1 == --create && -f $2 ]] || exit 91
+mkdir -p "$TEST_ROOT/run/xdrive-web-update"
+chmod 0730 "$TEST_ROOT/run/xdrive-web-update"''',
             "runuser": '''[[ $1 == -u && $2 == xdrive && $3 == -- ]] || exit 99
 shift 3
 if [[ -n ${TEST_CLI_OUTPUT:-} ]]; then printf '%s\\n' "$TEST_CLI_OUTPUT"; exit 0; fi
@@ -145,6 +148,13 @@ else:
         self.assertNotIn("within 24 hours", result.stdout)
         self.assertTrue((self.root / "var/lib/xdrive/xdrive.db").is_file())
         self.assertTrue((self.root / "etc/systemd/system/xdrive.service").is_file())
+        path_unit = (self.root / "etc/systemd/system/xdrive-web-update.path").read_text()
+        update_unit = (self.root / "etc/systemd/system/xdrive-web-update.service").read_text()
+        service_unit = (self.root / "etc/systemd/system/xdrive.service").read_text()
+        self.assertIn("PathExists=" + str(self.root) + "/run/xdrive-web-update/request.json", path_unit)
+        self.assertIn("web-update-worker", update_unit)
+        self.assertIn("ReadWritePaths=" + str(self.root) + "/var/lib/xdrive " + str(self.root) + "/run/xdrive-web-update", service_unit)
+        self.assertTrue((self.root / "etc/tmpfiles.d/xdrive-web-update.conf").is_file())
 
     def test_nginx_mode_installs_isolated_vhost_and_uses_certbot_without_touching_other_sites(self):
         other_site = self.root / "etc/nginx/conf.d/original-site.conf"

@@ -122,7 +122,7 @@ if printf '%s\n' "$listeners" | awk '{ print $4 }' | grep -Eq ':8787$'; then
   printf 'The XDrive backend port 8787 is already in use. No installation changes were made.\n' >&2
   exit 1
 fi
-[[ ! -e /etc/xdrive/config.toml && ! -L /etc/xdrive/config.toml && ! -e /etc/systemd/system/xdrive.service && ! -L /etc/systemd/system/xdrive.service && ! -e /usr/local/libexec/xdrive/xdrive && ! -L /usr/local/libexec/xdrive/xdrive && ! -e /usr/local/bin/xdrive && ! -L /usr/local/bin/xdrive ]] || {
+[[ ! -e /etc/xdrive/config.toml && ! -L /etc/xdrive/config.toml && ! -e /etc/systemd/system/xdrive.service && ! -L /etc/systemd/system/xdrive.service && ! -e /etc/systemd/system/xdrive-web-update.path && ! -L /etc/systemd/system/xdrive-web-update.path && ! -e /etc/systemd/system/xdrive-web-update.service && ! -L /etc/systemd/system/xdrive-web-update.service && ! -e /etc/tmpfiles.d/xdrive-web-update.conf && ! -L /etc/tmpfiles.d/xdrive-web-update.conf && ! -e /usr/local/libexec/xdrive/xdrive && ! -L /usr/local/libexec/xdrive/xdrive && ! -e /usr/local/bin/xdrive && ! -L /usr/local/bin/xdrive ]] || {
   printf 'An XDrive installation already exists. Use the upgrade procedure; this installer will not overwrite it.\n' >&2
   exit 1
 }
@@ -226,7 +226,7 @@ archive="$temporary_dir/release.tar.gz"
 if [[ -n $bundle ]]; then
   cp -- "$bundle" "$archive"
 else
-  curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "$release_url"
+  curl --fail --location --proto '=https' --tlsv1.2 --max-filesize 134217728 --output "$archive" "$release_url"
 fi
 actual_digest=$(sha256sum "$archive" | awk '{ print $1 }')
 expected_digest=$(printf '%s' "$expected_digest" | tr '[:upper:]' '[:lower:]')
@@ -331,7 +331,7 @@ NoNewPrivileges=yes
 PrivateTmp=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=$data_dir
+ReadWritePaths=$data_dir /run/xdrive-web-update
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]
@@ -348,7 +348,6 @@ for attempt in {1..30}; do
   fi
   sleep 1
 done
-
 if [[ $proxy_mode == caddy ]]; then
   install -d -m 0755 /etc/caddy/Caddyfile.d
   snippet=/etc/caddy/Caddyfile.d/xdrive.caddy
@@ -486,6 +485,46 @@ fi
 # The proxy route is now active. If setup-token output parsing fails, leave the
 # working installation intact so an administrator can issue a fresh token.
 nginx_install_complete=true
+
+cat > "$temporary_dir/xdrive-web-update.path" <<'EOF'
+[Unit]
+Description=Watch for an approved XDrive update request
+
+[Path]
+PathExists=/run/xdrive-web-update/request.json
+Unit=xdrive-web-update.service
+
+[Install]
+WantedBy=multi-user.target
+EOF
+cat > "$temporary_dir/xdrive-web-update.service" <<'EOF'
+[Unit]
+Description=Apply an approved XDrive release update
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+WorkingDirectory=/
+ExecStart=/usr/local/libexec/xdrive/xdrive web-update-worker
+TimeoutStartSec=30min
+TimeoutStopSec=30min
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+EOF
+printf '%s\n' 'd /run/xdrive-web-update 0730 root xdrive -' > "$temporary_dir/xdrive-web-update.conf"
+install -d -m 0755 /etc/tmpfiles.d
+install -m 0644 -o root -g root "$temporary_dir/xdrive-web-update.path" /etc/systemd/system/xdrive-web-update.path
+install -m 0644 -o root -g root "$temporary_dir/xdrive-web-update.service" /etc/systemd/system/xdrive-web-update.service
+install -m 0644 -o root -g root "$temporary_dir/xdrive-web-update.conf" /etc/tmpfiles.d/xdrive-web-update.conf
+systemd-tmpfiles --create /etc/tmpfiles.d/xdrive-web-update.conf
+systemctl daemon-reload
+systemctl enable --now xdrive-web-update.path
 
 setup_output=$(runuser -u xdrive -- /usr/local/libexec/xdrive/xdrive setup-token --config /etc/xdrive/config.toml)
 if [[ $setup_output =~ ^Open[[:space:]]/setup#([A-Za-z0-9_-]+)([[:space:]]|$) ]]; then

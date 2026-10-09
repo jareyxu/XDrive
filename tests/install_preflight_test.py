@@ -88,6 +88,8 @@ fi
 
     def test_dangling_managed_entries_reject_before_archive_or_changes(self):
         for relative in ["etc/xdrive/config.toml", "etc/systemd/system/xdrive.service",
+                         "etc/systemd/system/xdrive-web-update.path", "etc/systemd/system/xdrive-web-update.service",
+                         "etc/tmpfiles.d/xdrive-web-update.conf",
                          "usr/local/libexec/xdrive/xdrive", "usr/local/bin/xdrive",
                          "etc/caddy/Caddyfile.d/xdrive.caddy"]:
             with self.subTest(path=relative):

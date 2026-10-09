@@ -26,6 +26,8 @@ XDrive 在浏览器中使用 Argon2id 派生密钥，并使用 AES-256-GCM 加�
 
 Linux 安装脚本目前面向 Ubuntu 24.04 或 Debian 12（amd64／arm64），可配置 Nginx 或 Caddy。Nginx 模式会为 XDrive 添加独立的虚拟主机，不会改写原有网站配置。使用子域名（例如 `drive.example.com`）；当前不支持把应用挂在 `example.com/drive` 这样的 URL 子路径下。安装与升级仍处于实验阶段；请勿在未备份的 VPS 上尝试。
 
+设置页的可视化稳定版更新功能将在包含该功能的后续发行版中提供。新安装会自动配置独立的 root systemd 更新任务；从 v1.3.1 手动升级到首个包含该功能的版本后，需要以 root 运行一次 `xdrive enable-web-updates`。更新按钮会显示官方 GitHub 发布页并要求再次确认；服务器只安装该仓库的最新稳定版，并核对该发布页提供的 SHA-256 清单。归档与清单来自同一 GitHub 发布源，此检查不等于独立离线签名；使用此功能需要 VPS 能通过 HTTPS 访问 GitHub，并信任 XDrive 的 GitHub 发布账号。
+
 ## 本地开发
 
 开发环境需要 Go 1.27.1、Node.js 26.0.0 和 pnpm 11.24.0：

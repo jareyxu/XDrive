@@ -131,6 +131,14 @@ printf 'XDrive uninstall: data directory %s will be %s.\n' "$data_dir" "$([[ $de
 printf 'Backups, proxy packages, certificates and the xdrive OS account will be retained.\n'
 [[ $dry_run == false ]] || exit 0
 
+# Remove only the optional root-managed updater units through the installed
+# binary, which validates their exact contents before touching them.
+if [[ -e /etc/systemd/system/xdrive-web-update.path || -L /etc/systemd/system/xdrive-web-update.path ||
+      -e /etc/systemd/system/xdrive-web-update.service || -L /etc/systemd/system/xdrive-web-update.service ||
+      -e /etc/tmpfiles.d/xdrive-web-update.conf || -L /etc/tmpfiles.d/xdrive-web-update.conf ]]; then
+  "$binary" disable-web-updates
+fi
+
 temporary_dir=$(mktemp -d)
 site_removed=false
 nginx_site_removed=false

@@ -21,6 +21,7 @@ import (
 	"xdrive/internal/db"
 	"xdrive/internal/server"
 	"xdrive/internal/storage"
+	"xdrive/internal/update"
 )
 
 // version and buildCommit are injected by the release builder. Local builds
@@ -79,6 +80,24 @@ func runContext(args []string, operationContext context.Context) error {
 	}
 	if command == "update" {
 		return runInstalledScript("upgrade.sh", args)
+	}
+	if command == "enable-web-updates" {
+		if len(args) != 0 {
+			return errors.New("enable-web-updates does not accept arguments")
+		}
+		return runEnableWebUpdates()
+	}
+	if command == "disable-web-updates" {
+		if len(args) != 0 {
+			return errors.New("disable-web-updates does not accept arguments")
+		}
+		return runDisableWebUpdates()
+	}
+	if command == "web-update-worker" {
+		if len(args) != 0 {
+			return errors.New("web-update-worker does not accept arguments")
+		}
+		return update.RunWorker(operationContext, update.WorkerOptions{Current: version, RequireRoot: true})
 	}
 	if command == "uninstall" {
 		return runInstalledScript("uninstall.sh", args)

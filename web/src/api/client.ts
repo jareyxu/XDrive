@@ -546,6 +546,43 @@ interface APIStatus {
 export interface SystemInfo { readonly version: string; readonly commit: string; readonly clientProtocolVersion: number; readonly encryptedFormatVersion: number }
 
 export async function fetchSystemInfo(signal?: AbortSignal): Promise<SystemInfo> { return request<SystemInfo>('/api/v1/system/info', signal) }
+
+export interface SystemUpdateInfo {
+  readonly currentVersion: string
+  readonly latestVersion: string
+  readonly name: string
+  readonly releaseUrl: string
+  readonly publishedAt: string
+  readonly releaseNotes: string
+  readonly updateAvailable: boolean
+  readonly canInstall: boolean
+}
+
+export interface SystemUpdateStatus {
+  readonly id: string
+  readonly version: string
+  readonly state: 'queued' | 'checking' | 'downloading' | 'installing' | 'succeeded' | 'failed'
+  readonly errorCode?: string
+  readonly updatedAt: number
+}
+
+export async function fetchSystemUpdateInfo(signal?: AbortSignal): Promise<SystemUpdateInfo> {
+  const value = await request<SystemUpdateInfo>('/api/v1/system/update', signal)
+  const releaseURL = new URL(value.releaseUrl)
+  if (releaseURL.origin !== 'https://github.com' || releaseURL.username || releaseURL.password || releaseURL.search || releaseURL.hash || releaseURL.pathname !== `/jareyxu/XDrive/releases/tag/${value.latestVersion}` || typeof value.currentVersion !== 'string' || typeof value.latestVersion !== 'string' || typeof value.updateAvailable !== 'boolean' || typeof value.canInstall !== 'boolean' || typeof value.releaseNotes !== 'string' || value.releaseNotes.length > 8192) {
+    throw new TypeError('更新信息格式无效')
+  }
+  return value
+}
+
+export async function startSystemUpdate(version: string, signal?: AbortSignal): Promise<SystemUpdateStatus> {
+  return post<SystemUpdateStatus>('/api/v1/system/update', { version }, true, undefined, signal)
+}
+
+export async function fetchSystemUpdateStatus(id: string, signal?: AbortSignal): Promise<SystemUpdateStatus> {
+  return request<SystemUpdateStatus>(`/api/v1/system/update/status?id=${encodeURIComponent(id)}`, signal)
+}
+
 export async function fetchTrashRetentionLabel(signal?: AbortSignal): Promise<string> {
   const info = await request<{ trashRetentionSeconds?: unknown }>('/api/v1/system/info', signal)
   const seconds = info.trashRetentionSeconds

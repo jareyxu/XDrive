@@ -22,5 +22,13 @@
 .about { margin: 0; }
 .about div { display: flex; justify-content: space-between; gap: 16px; padding: 12px 0; border-top: 1px solid var(--separator); }
 .about dd { margin: 0; overflow-wrap: anywhere; text-align: right; }
+.updateMessage { margin: 12px 0 0; padding: 12px; border-radius: var(--radius-control); background: var(--fill-2); line-height: 1.55; }
+.updateActions { display: flex; align-items: center; justify-content: space-between; gap: 16px; border-top: 1px solid var(--separator); padding-top: 14px; }
+.updateActions .help { margin: 0; }
+.updateConfirm { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--separator); border-radius: var(--radius-control); }
+.updateConfirm p { flex: 1 1 100%; margin: 0; line-height: 1.55; }
+.releaseDetails { margin-top: 12px; border-top: 1px solid var(--separator); padding-top: 12px; }
+.releaseDetails summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; color: var(--accent); }
+.releaseDetails pre { max-height: 280px; overflow: auto; margin: 8px 0 0; padding: 12px; border-radius: var(--radius-control); background: var(--fill-2); font: inherit; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media(max-width:760px) { .page { padding: 0 18px 24px; } .group { padding: 16px; } .row { flex-wrap: wrap; } .segment { width: 100%; } .segment button { flex: 1; } }
 @media(forced-colors:active) { .segment button[aria-pressed="true"] { border-color: Highlight; } .preview { background: Canvas; } .preview span, .group, .warning { border: 1px solid CanvasText; } }

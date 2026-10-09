@@ -27,6 +27,7 @@ import (
 	"xdrive/internal/config"
 	"xdrive/internal/db"
 	"xdrive/internal/storage"
+	"xdrive/internal/update"
 )
 
 // Vite may emit legitimate lazy modules beginning with an underscore. Plain
@@ -58,6 +59,15 @@ type Handler struct {
 	trashRetention       time.Duration
 	sessionIdleTimeout   time.Duration
 	metadataKeepVersions int
+	buildVersion         string
+	updateHTTPClient     *http.Client
+	updateRequestPath    string
+	updateStatusPath     string
+	updateCheck          func(context.Context) (update.Release, error)
+	updateManagerCheck   func(context.Context) bool
+	updateCacheMu        sync.Mutex
+	updateCache          update.Release
+	updateCacheAt        time.Time
 	// uploadPublishedHook is an unexported fault-injection point for same-package
 	// crash tests. Production handlers leave it nil.
 	uploadPublishedHook func()
@@ -248,6 +258,23 @@ func NewWithBuild(cfg config.Config, version, commit string) (*Handler, error) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"version": version, "commit": commit, "clientProtocolVersion": clientProtocolVersion, "encryptedFormatVersion": 2, "textPreviewLimit": cfg.TextPreviewLimit, "videoBlobFallbackLimit": cfg.VideoBlobFallbackLimit, "zipMemoryFallbackLimit": cfg.ZipMemoryFallbackLimit, "trashRetentionSeconds": int64(retention / time.Second)})
 	})
+	mux.HandleFunc("GET /api/v1/system/update", func(w http.ResponseWriter, r *http.Request) {
+		if !validSession(r, database) {
+			writeError(w, http.StatusUnauthorized, "invalid_session")
+			return
+		}
+		handler.systemUpdateInfo(w, r)
+	})
+	mux.HandleFunc("GET /api/v1/system/update/status", func(w http.ResponseWriter, r *http.Request) {
+		if !validSession(r, database) {
+			writeError(w, http.StatusUnauthorized, "invalid_session")
+			return
+		}
+		handler.systemUpdateStatus(w, r)
+	})
+	mux.HandleFunc("POST /api/v1/system/update", func(w http.ResponseWriter, r *http.Request) {
+		handler.startSystemUpdate(w, r)
+	})
 	mux.HandleFunc("GET /api/v1/vault/state", func(w http.ResponseWriter, r *http.Request) {
 		if !validSession(r, database) {
 			writeError(w, http.StatusUnauthorized, "invalid_session")
@@ -435,7 +462,7 @@ func NewWithBuild(cfg config.Config, version, commit string) (*Handler, error) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 	initialized = true
-	handler = &Handler{mux: mux, database: database, secret: secret, serviceLease: lease, trashRetention: retention, sessionIdleTimeout: idleTimeout, metadataKeepVersions: cfg.MetadataKeepVersions}
+	handler = &Handler{mux: mux, database: database, secret: secret, serviceLease: lease, trashRetention: retention, sessionIdleTimeout: idleTimeout, metadataKeepVersions: cfg.MetadataKeepVersions, buildVersion: version, updateHTTPClient: update.HTTPClient(), updateRequestPath: update.DefaultRequestPath, updateStatusPath: update.DefaultStatusPath}
 	return handler, nil
 }
 

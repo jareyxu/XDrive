@@ -1,7 +1,7 @@
 import { RequestIdControl } from './RequestIdControl'
 import { useErrorNotice } from './use-error-notice'
 import { useEffect, useState } from 'react'
-import { fetchStorageUsage, fetchSystemInfo, type StorageUsage, type SystemInfo } from '../api/client'
+import { fetchStorageUsage, fetchSystemInfo, fetchSystemUpdateInfo, fetchSystemUpdateStatus, startSystemUpdate, type StorageUsage, type SystemInfo, type SystemUpdateInfo, type SystemUpdateStatus } from '../api/client'
 import { effectiveBackupReminderDays, backupIsOverdue, setPreferences, usePreferences } from '../preferences/preferences'
 import styles from './SettingsScreen.module.css'
 
@@ -12,6 +12,11 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
   const [error, setError, errorRequestId] = useErrorNotice()
   const [refresh, setRefresh] = useState(0)
   const [busy, setBusy] = useState(true)
+  const [updateInfo, setUpdateInfo] = useState<SystemUpdateInfo | null>(null)
+  const [updateStatus, setUpdateStatus] = useState<SystemUpdateStatus | null>(null)
+  const [checkingUpdates, setCheckingUpdates] = useState(false)
+  const [confirmUpdate, setConfirmUpdate] = useState(false)
+  const [updateError, setUpdateError] = useState('')
   useEffect(() => {
     const controller = new AbortController()
     let live = true
@@ -30,8 +35,62 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
     })
     return () => { live = false; controller.abort() }
   }, [props.revision, refresh, setError])
+  useEffect(() => {
+    const requestId = updateStatus?.id
+    if (!requestId || updateStatus.state === 'succeeded' || updateStatus.state === 'failed') return
+    const controller = new AbortController()
+    let timer = 0
+    let attempts = 0
+    const poll = async () => {
+      try {
+        const status = await fetchSystemUpdateStatus(requestId, controller.signal)
+        if (controller.signal.aborted) return
+        setUpdateStatus(status)
+        if (status.state === 'succeeded') {
+          setConfirmUpdate(false)
+          void Promise.all([fetchSystemInfo(), fetchSystemUpdateInfo()]).then(([build, release]) => { setInfo(build); setUpdateInfo(release) }).catch(() => undefined)
+          return
+        }
+        if (status.state === 'failed') return
+      } catch {
+        if (controller.signal.aborted) return
+        attempts += 1
+        if (attempts > 120) {
+          setUpdateError('更新状态暂时无法读取。请检查服务器上的 xdrive-web-update.service 日志。')
+          return
+        }
+      }
+      timer = window.setTimeout(() => void poll(), 1800)
+    }
+    void poll()
+    return () => { controller.abort(); window.clearTimeout(timer) }
+  }, [updateStatus?.id, updateStatus?.state])
   const reminderDays = usage ? effectiveBackupReminderDays(usage.backupWarnAfterDays, preferences.backupReminderDays) : null
   const expired = usage && backupIsOverdue(usage.lastBackupAt, props.now, reminderDays!)
+  const checkForUpdates = async () => {
+    setCheckingUpdates(true)
+    setUpdateError('')
+    setConfirmUpdate(false)
+    try {
+      setUpdateInfo(await fetchSystemUpdateInfo(AbortSignal.timeout(25000)))
+    } catch {
+      setUpdateError('无法连接 GitHub 获取正式版信息。请确认服务器网络正常后重试。')
+    } finally {
+      setCheckingUpdates(false)
+    }
+  }
+  const beginUpdate = async () => {
+    if (!updateInfo?.updateAvailable || !updateInfo.canInstall) return
+    setUpdateError('')
+    setConfirmUpdate(false)
+    try {
+      setUpdateStatus(await startSystemUpdate(updateInfo.latestVersion, AbortSignal.timeout(15000)))
+    } catch {
+      setUpdateError('无法启动更新。请重新检查版本，或查看服务器服务日志。')
+    }
+  }
+  const updateStateText = (state: SystemUpdateStatus['state']) => ({ queued: '已排队，等待服务器启动更新任务…', checking: '正在确认正式版信息…', downloading: '正在下载并校验发布包…', installing: '正在安装。XDrive 服务会短暂重启…', succeeded: '更新完成，请刷新页面载入新版界面。', failed: '更新没有完成。' })[state]
+  const updateFailureText = (code?: string) => ({ release_check_failed: '服务器无法连接 GitHub；没有更改已安装文件。', release_changed: '正式版在检查后发生变化，请重新检查再试。', version_not_newer: '所选版本已不比当前版本新。', unsupported_architecture: '此服务器架构暂不支持网页更新。', checksum_unavailable: '无法读取正式版校验文件；没有安装该版本。', release_invalid: '正式版信息无效；更新已停止。', upgrade_failed: '更新失败。请查看 xdrive-web-update.service 日志，确认服务恢复状态。' } as Record<string, string>)[code ?? ''] ?? '更新失败；请检查服务器更新服务日志。'
   return <section className={styles.page} aria-label="云盘设置">
     <div className="content-heading"><div><p className="eyebrow">此浏览器与账号</p><h1>设置</h1></div></div>
     {!preferences.persistenceAvailable && <p className="form-notice" role="status">浏览器不允许保存偏好。当前设置仍会生效，但刷新后可能恢复默认值。</p>}
@@ -44,6 +103,18 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
     <section className={styles.group} aria-labelledby="transfer-title"><h2 id="transfer-title">传输</h2><div className={styles.row}><label htmlFor="upload-concurrency">上传分块并发</label><select id="upload-concurrency" value={preferences.uploadConcurrency} onChange={event => setPreferences({ uploadConcurrency: Number(event.target.value) as 2 | 3 | 4 })}>{[2, 3, 4].map(count => <option key={count} value={count}>{count} 个分块</option>)}</select></div><p className={styles.help}>从下一次文件上传或续传开始生效。并发越高，浏览器与服务器资源占用越多；默认 2 个分块。</p></section>
     <section className={styles.group} aria-labelledby="security-title"><h2 id="security-title">安全</h2><div className={styles.row}><div>修改密码<small>修改密码不会更换主密钥。忘记密码无法恢复数据。</small></div><button className="toolbar-button" type="button" disabled={props.passwordDisabled} onClick={props.onChangePassword}>修改密码</button></div><p className={styles.help}>无操作 10 分钟后自动锁定；实际上传、下载和视频播放期间按任务状态延后锁定。</p></section>
     <section className={styles.group} aria-labelledby="backup-title"><h2 id="backup-title">备份</h2><div className={styles.row}><label htmlFor="backup-reminder">备份提醒阈值</label><select id="backup-reminder" value={preferences.backupReminderDays} onChange={event => setPreferences({ backupReminderDays: Number(event.target.value) })}>{[7, 30, 90, ...([7, 30, 90].includes(preferences.backupReminderDays) ? [] : [preferences.backupReminderDays])].map(days => <option key={days} value={days}>{days} 天</option>)}</select></div><p className={styles.help}>{busy ? '正在读取备份状态…' : usage ? usage.lastBackupAt === null ? '从未备份。' : <>上次备份：<time dateTime={new Date(usage.lastBackupAt).toISOString()}>{new Date(usage.lastBackupAt).toLocaleString('zh-CN')}</time></> : '备份状态不可用。'}</p>{!busy && expired && <p className={styles.warning}>请将云盘备份到外部存储；{usage?.lastBackupAt === null ? '尚无已完成的备份。' : `上次备份已超过 ${reminderDays} 天。`}</p>}<p className={styles.help}>浏览器阈值保存在此浏览器；实际提醒采用它与服务器阈值中较短的天数。{usage && `服务器阈值 ${usage.backupWarnAfterDays} 天，实际阈值 ${reminderDays} 天。`}不会自动创建备份。备份和恢复请使用服务器上的管理命令。</p></section>
+    <section className={styles.group} aria-labelledby="updates-title"><h2 id="updates-title">软件更新</h2>
+      <div className={styles.row}><div>正式版<small>仅检查 XDrive GitHub 上的正式稳定版；更新由服务器上的 root 管理服务执行。</small></div><button type="button" className="toolbar-button" onClick={() => void checkForUpdates()} disabled={checkingUpdates || (updateStatus !== null && updateStatus.state !== 'succeeded' && updateStatus.state !== 'failed')}>{checkingUpdates ? '正在检查…' : '检查更新'}</button></div>
+      {updateInfo && <><dl className={styles.about}><div><dt>当前版本</dt><dd>{updateInfo.currentVersion}</dd></div><div><dt>最新正式版</dt><dd><a href={updateInfo.releaseUrl} target="_blank" rel="noreferrer">{updateInfo.latestVersion}</a>{updateInfo.publishedAt && <small> · 发布于 {new Date(updateInfo.publishedAt).toLocaleDateString('zh-CN')}</small>}</dd></div></dl>
+        {!updateInfo.updateAvailable && <p className={styles.updateMessage} role="status">当前已是最新正式版。</p>}
+        {updateInfo.updateAvailable && !updateInfo.canInstall && <p className={styles.warning}>发现新版本，但此服务器尚未启用网页更新管理服务。部署新版本后，以 root 运行 <code>xdrive enable-web-updates</code> 完成一次性启用。</p>}
+        {updateInfo.updateAvailable && updateInfo.canInstall && !confirmUpdate && <div className={styles.updateActions}><p className={styles.help}>更新会短暂重启服务。云盘文件和账号数据不会因更新而删除。</p><button type="button" className="toolbar-button" onClick={() => setConfirmUpdate(true)} disabled={updateStatus !== null && updateStatus.state !== 'succeeded' && updateStatus.state !== 'failed'}>安装 {updateInfo.latestVersion}</button></div>}
+        {confirmUpdate && <div className={styles.updateConfirm} role="group" aria-label="确认安装更新"><p>确认从官方 GitHub 发布页安装 {updateInfo.latestVersion}？服务会短暂不可用。</p><button type="button" className="toolbar-button" onClick={() => void beginUpdate()}>确认更新</button><button type="button" className="quiet-button" onClick={() => setConfirmUpdate(false)}>取消</button></div>}
+        {updateInfo.releaseNotes && <details className={styles.releaseDetails}><summary>查看版本说明</summary><pre>{updateInfo.releaseNotes}</pre></details>}
+      </>}
+      {updateStatus && <p className={styles.updateMessage} role="status" aria-live="polite">{updateStateText(updateStatus.state)}{updateStatus.state === 'failed' && ` ${updateFailureText(updateStatus.errorCode)}`}</p>}
+      {updateError && <p className="form-error" role="alert">{updateError}</p>}
+    </section>
     <section className={styles.group} aria-labelledby="about-title"><h2 id="about-title">关于</h2><dl className={styles.about}><div><dt>应用版本</dt><dd>{info ? info.version === 'dev' ? 'dev（开发构建）' : info.version : busy ? '正在读取…' : '不可用'}</dd></div><div><dt>构建提交</dt><dd>{info?.commit || (busy ? '正在读取…' : '不可用')}</dd></div><div><dt>加密数据格式</dt><dd>{info ? `V${info.encryptedFormatVersion}` : busy ? '正在读取…' : '不可用'}</dd></div></dl></section>
     {error && <div role="alert" className="form-error">{error}<RequestIdControl requestId={errorRequestId} /><button type="button" className="quiet-button" onClick={() => setRefresh(value => value + 1)}>重新读取</button></div>}
   </section>
