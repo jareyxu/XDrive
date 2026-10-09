@@ -1,0 +1,11 @@
+.root { width: min(92vw, 520px); max-height: 82dvh; padding: 0; overflow: hidden; border: 1px solid var(--separator); border-radius: 18px; background: var(--surface-content); color: var(--label-1); box-shadow: 0 24px 80px rgb(0 0 0 / 28%); }
+.root::backdrop { background: rgb(0 0 0 / 48%); backdrop-filter: none; }
+.root > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px; border-bottom: 1px solid var(--separator); }
+.root h2 { margin: 5px 0 0; font-size: 17px; }
+.root > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 18px; border-top: 1px solid var(--separator); }
+.root > footer .confirm, .root > footer .cancel { min-height: 36px; padding: 0 14px; font-size: 12px; }
+
+.purge { max-width: min(480px, calc(100vw - 36px)); }
+.purge > p { padding-inline: 20px; line-height: 1.6; overflow-wrap: anywhere; }
+.purge > footer .cancel, .purge > footer .confirm { min-width: 88px; min-height: 44px; }
+.purge .confirm { background: #b63238; color: white; }

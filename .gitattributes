@@ -1,0 +1,3 @@
+# Captured browser logs and diagnostic excerpts preserve their original output.
+# Do not treat their trailing spaces or blank final lines as source whitespace.
+docs/operations/artifacts/** whitespace=-blank-at-eol,-blank-at-eof

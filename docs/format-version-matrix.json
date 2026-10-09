@@ -1,0 +1,116 @@
+{
+  "matrixVersion": 1,
+  "status": "provisional-no-go",
+  "scope": "XDrive V1.3.1 persistent and client mutation formats",
+  "contracts": {
+    "encryptedObjectEnvelope": {
+      "writeVersion": 1,
+      "readVersions": [1],
+      "cipherId": 1,
+      "cipher": "AES-256-GCM",
+      "unknownVersion": "reject"
+    },
+    "vaultConfigAndKeySlotAad": {
+      "writeVersion": 2,
+      "readVersions": [1, 2],
+      "unknownVersion": "reject",
+      "meaning": {
+        "1": "legacy direct Vault Key file and thumbnail derivation",
+        "2": "K_data hierarchy for newly encrypted files and thumbnails"
+      }
+    },
+    "fileCrypto": {
+      "writeByVaultFormat": {
+        "1": 1,
+        "2": 2
+      },
+      "readVersions": [1, 2],
+      "missingDirectoryEntryVersion": 1,
+      "unknownVersion": "reject"
+    },
+    "aadDomains": {
+      "domainPrefix": "xdrive/v1/",
+      "integerByteOrder": "big-endian",
+      "variableFieldLengthPrefixBytes": 4,
+      "keySlotFormatVersions": [1, 2],
+      "chunkManifestThumbnailCryptoVersions": [1, 2],
+      "indexVersion": 1,
+      "localStateVersion": 1
+    },
+    "directoryIndex": {
+      "writeVersion": 1,
+      "readVersions": [1],
+      "rootRequiredFields": ["version", "indexId", "entries"],
+      "folderEntryRequiredFields": ["entryId", "kind", "name", "childIndexId"],
+      "fileEntryRequiredFields": ["entryId", "kind", "name", "size", "mime", "fileId", "manifestObjectId", "manifestSha256"],
+      "optionalEntryFields": {
+        "allEntries": ["originalModifiedAt", "createdAt"],
+        "fileEntries": ["fileCryptoVersion", "thumbnail"]
+      },
+      "missingFileCryptoVersion": 1,
+      "missingTimestamps": "unknown; do not infer",
+      "unknownFieldsOrVersions": "reject"
+    },
+    "trashIndex": {
+      "writeVersion": 1,
+      "readVersions": [1],
+      "rootRequiredFields": ["version", "indexId", "entries"],
+      "entryRequiredFields": ["tombstoneId", "item", "originalParentId", "originalPath", "deletedAt"],
+      "originalPathEntryRequiredFields": ["indexId", "childIndexId", "name"],
+      "unknownFieldsOrVersions": "reject"
+    },
+    "fileManifest": {
+      "currentWriteVersion": 3,
+      "readSchemaVersions": [1, 2, 3],
+      "legacyVersions1And2Mean": "fileCryptoVersion",
+      "legacyOptionalFields": ["chunkSize", "thumbnail"],
+      "legacyMissingChunkSizeBytes": 8388608,
+      "schema3RequiredFields": ["version", "fileCryptoVersion", "fileId", "size", "chunkSize", "chunkCount", "mime", "originalModifiedAt", "chunks", "thumbnail"],
+      "schema3ChunkFields": ["index", "objectId", "plaintextSize", "sha256"],
+      "schema3OptionalFields": ["media"],
+      "schema3MissingThumbnail": "invalid; use explicit null",
+      "unknownFieldsOrVersions": "reject"
+    },
+    "uploadRecoveryPayload": {
+      "currentWriteVersion": 4,
+      "readVersions": [1, 2, 3, 4],
+      "versions1To3MissingFileCryptoVersion": 1,
+      "version3ThumbnailWriteAhead": true,
+      "version4FileCryptoVersionRequired": true,
+      "version1ReplacementCanResumeAutomatically": false,
+      "replacementResumeRequiresTargetFingerprint": true,
+      "unknownFieldsOrVersions": "reject"
+    },
+    "localState": {
+      "indexedDbName": "xdrive-local-v1",
+      "aadVersion": 1,
+      "recordTypes": ["upload-resume", "revision-baseline"],
+      "plaintextPolicy": "encrypted with K_local before IndexedDB persistence"
+    },
+    "backup": {
+      "writeFormatVersion": 1,
+      "readFormatVersions": [1],
+      "snapshotSchemaRange": {
+        "minimum": 2,
+        "maximum": 7
+      }
+    },
+    "sqlite": {
+      "currentSchemaVersion": 7,
+      "migrationPolicy": "forward only; after a schema-changing migration, restore the matching pre-migration database and binary before rollback"
+    },
+    "clientMutationProtocol": {
+      "currentVersion": 1,
+      "requestHeader": "X-XDrive-Client-Protocol",
+      "acceptance": "exact match only; reject missing, older, and future versions before reading mutation bodies"
+    }
+  },
+  "evolutionPolicy": [
+    "Unknown payload versions and unknown fields remain fail-closed.",
+    "The listed optional fields and their absent-value meanings are part of the current schema contract.",
+    "Adding or redefining a payload field requires a new payload schema version; it must not silently expand an older strict reader.",
+    "A change that makes a stale client unsafe for mutations increments the client mutation protocol version in Go and TypeScript.",
+    "Key derivation or AAD meaning changes use their own crypto version; they do not reuse a payload schema number.",
+    "SQLite schema migration, backup container format, encrypted object envelope, and browser payload schema are independent version dimensions."
+  ]
+}

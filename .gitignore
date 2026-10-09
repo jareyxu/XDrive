@@ -1,0 +1,53 @@
+# JavaScript
+node_modules/
+.pnpm-store/
+web/dist/
+web/.vite/
+web/test-results/
+web/playwright-report/
+*.tsbuildinfo
+coverage/
+/internal/server/static/**
+!/internal/server/static/README.md
+
+# Go
+/bin/
+/dist/
+/data/
+*.test
+*.out
+
+# Local validation logs, browser traces, VM state, and generated fixtures
+/output/
+# Playwright traces can contain page snapshots (including decrypted test data)
+# and are retained only in the local validation workspace.
+/docs/operations/artifacts/**/trace.zip
+/docs/operations/artifacts/**/*trace*.zip
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local.toml
+*.secret
+
+# Internal project specification documents; keep them out of public releases.
+/SECURITY.md
+/PRODUCT.md
+/IMPLEMENTATION.md
+/design.md
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+
+# Python test helpers and generated local verification binaries
+__pycache__/
+*.pyc
+/output/linux-cross-build-*/xdrive-*
+/output/release-archive-types-*/runtime/
+/output/release-archive-types-*/*.tar.gz
+/output/install-caddy-rollback-*/runtime/
+/output/operation-lock-safety-*/runtime/
+/output/systemd-upgrade-*/runtime/

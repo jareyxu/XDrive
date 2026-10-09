@@ -1,0 +1,45 @@
+import { describe, expect, it } from 'vitest'
+import { createBoundedBlobOutput } from './bounded-blob-output'
+
+describe('bounded archive memory output', () => {
+  it('accepts exactly the accumulated budget, copies input and snapshots before release', async () => {
+    const sink = createBoundedBlobOutput(4, 'application/zip')
+    const writer = sink.stream.getWriter()
+    const input = new Uint8Array([1, 2])
+    await writer.write(input)
+    input.fill(9)
+    await writer.write(new Uint8Array([3, 4]))
+    await writer.close()
+    const blob = sink.blob()
+    sink.destroy()
+    expect([...new Uint8Array(await blob.arrayBuffer())]).toEqual([1, 2, 3, 4])
+    expect(() => sink.blob()).toThrow(/released/)
+    sink.destroy()
+  })
+  it('rejects a one-byte excess before copying and releases earlier retained parts', async () => {
+    const sink = createBoundedBlobOutput(4, 'application/zip')
+    const writer = sink.stream.getWriter()
+    await writer.write(new Uint8Array([1, 2]))
+    const excess = new Uint8Array([3, 4, 5])
+    await expect(writer.write(excess)).rejects.toThrow(/4 bytes/)
+    expect([...excess]).toEqual([3, 4, 5])
+    expect(() => sink.blob()).toThrow(/released/)
+  })
+  it('signal cancellation releases partial output even while no write is pending', async () => {
+    const abort = new AbortController()
+    const sink = createBoundedBlobOutput(4, 'application/zip', abort.signal)
+    const writer = sink.stream.getWriter()
+    await writer.write(new Uint8Array([1]))
+    abort.abort()
+    expect(() => sink.blob()).toThrow()
+    await expect(writer.write(new Uint8Array([2]))).rejects.toThrow()
+  })
+  it('stream abort and initial cancellation never expose partial Blob', async () => {
+    const sink = createBoundedBlobOutput(4, 'application/zip')
+    await sink.stream.abort()
+    expect(() => sink.blob()).toThrow(/released/)
+    const abort = new AbortController()
+    abort.abort()
+    expect(() => createBoundedBlobOutput(4, 'application/zip', abort.signal).blob()).toThrow()
+  })
+})

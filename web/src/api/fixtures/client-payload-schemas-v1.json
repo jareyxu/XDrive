@@ -1,0 +1,299 @@
+{
+  "directoryIndexes": [
+    {
+      "version": 1,
+      "indexId": "root-index-000001",
+      "entries": [
+        {
+          "entryId": "folder-entry-0001",
+          "kind": "folder",
+          "name": "中文资料 📁",
+          "childIndexId": "child-index-000001",
+          "createdAt": 1791320400000
+        },
+        {
+          "entryId": "file-entry-000001",
+          "kind": "file",
+          "name": "legacy.webp",
+          "size": 128,
+          "mime": "image/webp",
+          "fileId": "file-id-0000000001",
+          "manifestObjectId": "manifest-object-001",
+          "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "originalModifiedAt": 1791320400000,
+          "thumbnail": {
+            "objectId": "thumb-object-00001",
+            "sizeBytes": 40,
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "mime": "image/webp",
+            "width": 128,
+            "height": 64
+          }
+        },
+        {
+          "entryId": "file-entry-000007",
+          "kind": "file",
+          "name": "empty.bin",
+          "size": 0,
+          "mime": "application/octet-stream",
+          "fileId": "file-id-0000000007",
+          "manifestObjectId": "manifest-object-007",
+          "manifestSha256": "7777777777777777777777777777777777777777777777777777777777777777"
+        }
+      ]
+    },
+    {
+      "version": 1,
+      "indexId": "child-index-000001",
+      "entries": [
+        {
+          "entryId": "file-entry-000002",
+          "kind": "file",
+          "name": "current.jpg",
+          "size": 3,
+          "mime": "image/jpeg",
+          "fileId": "file-id-0000000002",
+          "fileCryptoVersion": 2,
+          "manifestObjectId": "manifest-object-002",
+          "manifestSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "originalModifiedAt": 1791320400001,
+          "createdAt": 1791320400002,
+          "thumbnail": {
+            "objectId": "thumb-object-00002",
+            "sizeBytes": 40,
+            "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "mime": "image/jpeg",
+            "width": 1,
+            "height": 1,
+            "keyVersion": 2
+          }
+        }
+      ]
+    }
+  ],
+  "fileManifests": [
+    {
+      "entry": {
+        "entryId": "legacy-file-entry-01",
+        "kind": "file",
+        "name": "legacy-empty.bin",
+        "size": 0,
+        "mime": "application/octet-stream",
+        "fileId": "legacy-file-id-0001",
+        "manifestObjectId": "legacy-manifest-001",
+        "manifestSha256": "8888888888888888888888888888888888888888888888888888888888888888"
+      },
+      "manifest": {
+        "version": 1,
+        "fileId": "legacy-file-id-0001",
+        "size": 0,
+        "mime": "application/octet-stream",
+        "chunks": []
+      }
+    },
+    {
+      "entry": {
+        "entryId": "legacy-file-entry-02",
+        "kind": "file",
+        "name": "legacy-v2.bin",
+        "size": 3,
+        "mime": "application/octet-stream",
+        "fileId": "legacy-v2-file-id-01",
+        "fileCryptoVersion": 2,
+        "manifestObjectId": "legacy-v2-manifest-01",
+        "manifestSha256": "abababababababababababababababababababababababababababababababab"
+      },
+      "manifest": {
+        "version": 2,
+        "fileId": "legacy-v2-file-id-01",
+        "size": 3,
+        "mime": "application/octet-stream",
+        "chunks": [
+          {
+            "objectId": "legacy-v2-chunk-obj-01",
+            "plaintextSize": 3,
+            "sha256": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+          }
+        ]
+      }
+    },
+    {
+      "entry": {
+        "entryId": "current-file-entry-01",
+        "kind": "file",
+        "name": "current-empty.bin",
+        "size": 0,
+        "mime": "application/octet-stream",
+        "fileId": "current-file-id-001",
+        "fileCryptoVersion": 2,
+        "manifestObjectId": "current-manifest-001",
+        "manifestSha256": "9999999999999999999999999999999999999999999999999999999999999999",
+        "originalModifiedAt": 1791320400000,
+        "thumbnail": null
+      },
+      "manifest": {
+        "version": 3,
+        "fileCryptoVersion": 2,
+        "fileId": "current-file-id-001",
+        "size": 0,
+        "chunkSize": 8388608,
+        "chunkCount": 0,
+        "mime": "application/octet-stream",
+        "originalModifiedAt": 1791320400000,
+        "chunks": [],
+        "thumbnail": null
+      }
+    },
+    {
+      "entry": {
+        "entryId": "custom-chunk-entry-01",
+        "kind": "file",
+        "name": "custom-chunks.bin",
+        "size": 3,
+        "mime": "application/octet-stream",
+        "fileId": "custom-chunk-file-01",
+        "fileCryptoVersion": 2,
+        "manifestObjectId": "custom-chunk-manifest",
+        "manifestSha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "originalModifiedAt": 0,
+        "thumbnail": null
+      },
+      "manifest": {
+        "version": 3,
+        "fileCryptoVersion": 2,
+        "fileId": "custom-chunk-file-01",
+        "size": 3,
+        "chunkSize": 2,
+        "chunkCount": 2,
+        "mime": "application/octet-stream",
+        "originalModifiedAt": 0,
+        "chunks": [
+          { "index": 0, "objectId": "custom-chunk-object-01", "plaintextSize": 2, "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+          { "index": 1, "objectId": "custom-chunk-object-02", "plaintextSize": 1, "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" }
+        ],
+        "thumbnail": null
+      }
+    }
+  ],
+  "trashIndex": {
+    "version": 1,
+    "indexId": "trash-index-000001",
+    "entries": [
+      {
+        "tombstoneId": "tombstone-000001",
+        "item": {
+          "entryId": "trashed-folder-0001",
+          "kind": "folder",
+          "name": "旧项目",
+          "childIndexId": "trashed-index-0001",
+          "createdAt": 1791320400000
+        },
+        "originalParentId": "parent-index-000001",
+        "originalPath": [
+          {
+            "indexId": "root-index-000001",
+            "childIndexId": "child-index-000001",
+            "name": "中文资料 📁"
+          }
+        ],
+        "deletedAt": 1791320500000
+      }
+    ]
+  },
+  "uploadResumeRecords": [
+    {
+      "version": 1,
+      "id": "resume-record-0001",
+      "uploadId": "upload-session-0001",
+      "expiresAt": 1900000000000,
+      "directoryId": "root-index-000001",
+      "name": "恢复.txt",
+      "mime": "text/plain",
+      "size": 0,
+      "lastModified": 0,
+      "fingerprint": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "fileId": "file-id-0000000003",
+      "entryId": "file-entry-000003",
+      "chunks": [],
+      "manifest": null,
+      "index": null,
+      "indexRevision": null,
+      "idempotencyKey": null
+    },
+    {
+      "version": 2,
+      "id": "resume-record-0002",
+      "uploadId": "upload-session-0002",
+      "expiresAt": 1900000000000,
+      "directoryId": "root-index-000001",
+      "name": "替换.txt",
+      "mime": "text/plain",
+      "size": 0,
+      "lastModified": 0,
+      "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "fileId": "file-id-0000000004",
+      "entryId": "file-entry-000004",
+      "chunks": [],
+      "manifest": null,
+      "index": null,
+      "indexRevision": null,
+      "idempotencyKey": null,
+      "replaceEntryId": "old-entry-000001",
+      "replacementFingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
+      "tombstoneId": "tombstone-000002",
+      "trashIndex": null
+    },
+    {
+      "version": 3,
+      "id": "resume-record-0003",
+      "uploadId": "upload-session-0003",
+      "expiresAt": 1900000000000,
+      "directoryId": "root-index-000001",
+      "name": "缩略图.webp",
+      "mime": "image/webp",
+      "size": 0,
+      "lastModified": 0,
+      "fingerprint": "2222222222222222222222222222222222222222222222222222222222222222",
+      "fileId": "file-id-0000000005",
+      "entryId": "file-entry-000005",
+      "chunks": [],
+      "manifest": null,
+      "index": null,
+      "indexRevision": null,
+      "idempotencyKey": null,
+      "thumbnail": null
+    },
+    {
+      "version": 4,
+      "fileCryptoVersion": 2,
+      "id": "resume-record-0004",
+      "uploadId": "upload-session-0004",
+      "expiresAt": 1900000000000,
+      "directoryId": "root-index-000001",
+      "name": "缩略图.jpg",
+      "mime": "image/jpeg",
+      "size": 0,
+      "lastModified": 0,
+      "fingerprint": "3333333333333333333333333333333333333333333333333333333333333333",
+      "fileId": "file-id-0000000006",
+      "entryId": "file-entry-000006",
+      "chunks": [],
+      "manifest": null,
+      "index": null,
+      "indexRevision": null,
+      "idempotencyKey": null,
+      "thumbnail": {
+        "reference": {
+          "objectId": "thumb-object-00003",
+          "sizeBytes": 40,
+          "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "mime": "image/jpeg",
+          "width": 1,
+          "height": 1,
+          "keyVersion": 2
+        },
+        "ciphertext": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=="
+      }
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "keySlot": {
+    "input": {
+      "formatVersion": 2,
+      "configRevision": 1,
+      "slotId": "slot-1",
+      "type": "password",
+      "kdf": { "alg": "argon2id", "m": 65536, "t": 3, "p": 1, "salt": "AAECAwQFBgcICQoLDA0ODw==" }
+    },
+    "aadHex": "000000117864726976652f76312f6b6579736c6f7400000002000000000000000100000006736c6f742d310000000870617373776f7264000000086172676f6e32696400010000000000030000000100000010000102030405060708090a0b0c0d0e0f"
+  },
+  "keyDerivation": {
+    "vaultKeyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "dataKeyHex": "ef92f88a1ac10c4248f4dd91399d224bfc45f717f4edd3009dcad9fbd770ed7f",
+    "fileId": "file-α",
+    "fileKeyHex": "4ab4d94cf265ad849569b065d0d189dfb0b0189046e20c40c271d51716622bb8",
+    "thumbnailKeyHex": "0361c1390868864fdfa8b686fe7a7c88bee5401e7ef89e68a0057061d24e0adc"
+  },
+  "chunk": {
+    "input": { "fileId": "file-α", "chunkIndex": 2, "chunkCount": 3, "plaintextSize": 16777217 },
+    "aadHex": "0000000f7864726976652f76312f6368756e6b000000020000000766696c652dceb1000000000000000200000000000000030000000001000001"
+  },
+  "manifest": {
+    "fileId": "file-α",
+    "aadHex": "000000127864726976652f76312f6d616e6966657374000000020000000766696c652dceb1"
+  },
+  "thumbnail": {
+    "fileId": "file-α",
+    "aadHex": "000000137864726976652f76312f7468756d626e61696c000000020000000766696c652dceb1"
+  }
+}

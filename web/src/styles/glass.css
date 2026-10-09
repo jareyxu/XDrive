@@ -1,0 +1,30 @@
+.glass-chrome,
+.glass-thick {
+  border: 1px solid color-mix(in srgb, var(--label-1) 10%, transparent);
+  box-shadow: var(--shadow-panel);
+  -webkit-backdrop-filter: saturate(145%) blur(var(--blur-chrome));
+  backdrop-filter: saturate(145%) blur(var(--blur-chrome));
+}
+
+.glass-chrome { background: var(--surface-control); }
+.glass-thick {
+  background: var(--surface-thick);
+  -webkit-backdrop-filter: saturate(125%) blur(var(--blur-thick));
+  backdrop-filter: saturate(125%) blur(var(--blur-thick));
+}
+
+:root[data-reduce-transparency="true"] .glass-chrome,
+:root[data-reduce-transparency="true"] .glass-thick {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-chrome,
+  .glass-thick {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+}

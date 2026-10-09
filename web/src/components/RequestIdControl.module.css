@@ -1,0 +1,5 @@
+.control { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; margin-top: 8px; color: var(--label-2); }
+.identifier { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+.identifier input { font: inherit; font-family: monospace; color: var(--label-1); min-height: 44px; width: 34ch; max-width: 100%; box-sizing: border-box; }
+.control button { min-height: 44px; min-width: 44px; }
+.status { flex-basis: 100%; }

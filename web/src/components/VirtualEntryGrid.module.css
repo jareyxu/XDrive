@@ -1,0 +1,4 @@
+.viewport { max-width: 986px; margin: 0 auto 24px; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.row { display: grid; position: absolute; inset: 0 0 auto; }
+@media(max-width:760px) { .viewport { margin-inline: 18px; } }
+@media(max-width:360px) { .viewport { margin-inline: 0; } }
