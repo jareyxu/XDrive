@@ -1,0 +1,115 @@
+name: Publish stable release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: stable-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build and publish stable release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify stable tag and wait for successful main CI
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          echo "stable=false" >> "$GITHUB_OUTPUT"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Ignoring non-stable version tag: $tag"
+            exit 0
+          fi
+          [[ "$(git rev-parse "$tag^{commit}")" == "$GITHUB_SHA" ]]
+          git fetch origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main
+          python3 scripts/check_release_format_gate.py \
+            --version "$tag" \
+            --matrix docs/format-version-matrix.json
+
+          deadline=$((SECONDS + 2700))
+          while (( SECONDS < deadline )); do
+            runs="$(gh run list \
+              --repo "$GITHUB_REPOSITORY" \
+              --workflow ci.yml \
+              --commit "$GITHUB_SHA" \
+              --limit 100 \
+              --json databaseId,event,headBranch,headSha,status,conclusion)"
+            run="$(jq -c --arg sha "$GITHUB_SHA" \
+              '[.[] | select(.headSha == $sha and .headBranch == "main" and .event == "push")] | sort_by(.databaseId) | last // empty' \
+              <<<"$runs")"
+            if [[ -n "$run" ]]; then
+              status="$(jq -r '.status' <<<"$run")"
+              conclusion="$(jq -r '.conclusion // empty' <<<"$run")"
+              if [[ "$status" == completed ]]; then
+                [[ "$conclusion" == success ]] || {
+                  echo "The main-branch CI run for $GITHUB_SHA concluded: ${conclusion:-unknown}" >&2
+                  exit 1
+                }
+                echo "Main CI passed for $GITHUB_SHA."
+                ci_run_id="$(jq -r '.databaseId' <<<"$run")"
+                echo "ci_run_id=$ci_run_id" >> "$GITHUB_OUTPUT"
+                echo "stable=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+            fi
+            sleep 15
+          done
+          echo "Timed out waiting for successful main-branch CI for $GITHUB_SHA." >&2
+          exit 1
+
+      - name: Restore web assets from validated CI
+        if: steps.release.outputs.stable == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: xdrive-web-assets
+          path: internal/server/static
+          run-id: ${{ steps.release.outputs.ci_run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Set up Go
+        if: steps.release.outputs.stable == 'true'
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+
+      - name: Verify Go toolchain
+        if: steps.release.outputs.stable == 'true'
+        run: test "$(go version)" = "go version go1.27.1 linux/amd64"
+
+      - name: Package Linux amd64 and arm64 archives
+        if: steps.release.outputs.stable == 'true'
+        run: scripts/package-release.sh "$GITHUB_REF_NAME"
+
+      - name: Publish GitHub Release
+        if: steps.release.outputs.stable == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            dist/release/"$GITHUB_REF_NAME"/xdrive-"$GITHUB_REF_NAME"-linux-amd64.tar.gz \
+            dist/release/"$GITHUB_REF_NAME"/xdrive-"$GITHUB_REF_NAME"-linux-arm64.tar.gz \
+            dist/release/"$GITHUB_REF_NAME"/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "XDrive $GITHUB_REF_NAME" \
+            --verify-tag \
+            --generate-notes

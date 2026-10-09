@@ -39,7 +39,7 @@ make build
 ./dist/xdrive serve
 ```
 
-`init` 会生成一次性设置链接。默认服务只监听本机回环地址。开发、构建和测试命令见 [Makefile](Makefile)。
+`init` 会生成一次性设置链接。默认服务只监听本机回环地址。开发、构建和测试命令见 [Makefile](Makefile)。 维护者发布流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 重要限制
 

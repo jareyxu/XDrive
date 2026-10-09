@@ -27,7 +27,7 @@ build: web-check server-check
 	go build -o dist/xdrive ./cmd/xdrive
 
 scripts-check:
-	bash -n scripts/install.sh scripts/upgrade.sh scripts/uninstall.sh scripts/release.sh
+	bash -n scripts/install.sh scripts/upgrade.sh scripts/uninstall.sh scripts/release.sh scripts/package-release.sh
 	node --check web/scripts/folder_selection_resource_check.mjs
 	python3 tests/release_format_gate_test.py
 	python3 tests/client_protocol_contract_test.py

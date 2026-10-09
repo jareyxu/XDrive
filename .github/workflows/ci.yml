@@ -2,6 +2,8 @@ name: CI
 
 on:
   push:
+    branches:
+      - main
   pull_request:
   workflow_dispatch:
 
@@ -68,3 +70,12 @@ jobs:
         run: |
           GOARCH=amd64 go build -trimpath -o /tmp/xdrive-linux-amd64 ./cmd/xdrive
           GOARCH=arm64 go build -trimpath -o /tmp/xdrive-linux-arm64 ./cmd/xdrive
+
+      - name: Upload embedded web assets for tagged releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: xdrive-web-assets
+          path: internal/server/static/
+          if-no-files-found: error
+          retention-days: 7
