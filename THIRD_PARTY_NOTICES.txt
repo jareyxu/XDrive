@@ -1,0 +1,10 @@
+This release contains heic-to 1.6.5, distributed under the GNU Lesser General
+Public License, version 3. The decoder is loaded as a separate, on-demand
+browser worker and is used only for local HEIC/HEIF preview and thumbnail
+generation. The source project and exact package version are available at:
+https://github.com/hoppergee/heic-to
+https://www.npmjs.com/package/heic-to/v/1.6.5
+
+The full LGPL-3.0 license text is included in LGPL-3.0-heic-to.txt.
+XDrive's own source code remains under the MIT License; this notice applies to
+the bundled HEIC decoder.

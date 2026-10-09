@@ -29,6 +29,9 @@ importers:
       dompurify:
         specifier: ^3.4.16
         version: 3.4.16
+      heic-to:
+        specifier: 1.6.5
+        version: 1.6.5
       highlight.js:
         specifier: 11.12.0
         version: 11.12.0
@@ -937,6 +940,9 @@ packages:
   get-nonce@1.0.1:
     resolution: {integrity: sha512-FJhYRoDaiatfEkUK8HKlicmu/3SGFD51q3itKDGoSTysQJBnfOcxU5GxnhE1E6soB76MbT0MBtnKJuXyAx+96Q==}
     engines: {node: '>=6'}
+
+  heic-to@1.6.5:
+    resolution: {integrity: sha512-xPH6gvrzSRIFo/GyzYbr+DZX1JoQliw1oJBT1PCduR0ruDVs1DjlAdU1m5Thed2ZXBoLqYMCd5UXiJteRl3BNQ==}
 
   highlight.js@11.12.0:
     resolution: {integrity: sha512-nbfWpyRMcMrPMmDwJB+dhX/eiaPKtc2RB+0QZskqJ3WjRA/FDS0e9hZrx8EC/lbEv8gXy98FcDbNa/dspAaJMg==}
@@ -2002,6 +2008,8 @@ snapshots:
     optional: true
 
   get-nonce@1.0.1: {}
+
+  heic-to@1.6.5: {}
 
   highlight.js@11.12.0: {}
 

@@ -49,6 +49,8 @@ class InstallCompletionTests(unittest.TestCase):
         shutil.copy2(self.binary, stage / "xdrive")
         for name in ["install.sh", "upgrade.sh", "uninstall.sh"]:
             shutil.copy2(ROOT / "scripts" / name, stage / name)
+        for name in ["THIRD_PARTY_NOTICES.txt", "LGPL-3.0-heic-to.txt"]:
+            shutil.copy2(ROOT / name, stage / name)
         (stage / "RELEASE.txt").write_text("version=v1.3.1-rc.fixture\nos=linux\narchitecture=amd64\n")
         self.bundle = self.root / "release.tar.gz"
         with tarfile.open(self.bundle, "w:gz") as archive:
@@ -195,7 +197,7 @@ else:
         extracted = observe_extraction(self.root, self.commands)
         target = self.root / "outside"
         target.write_bytes(b"outside-preserved")
-        for name, kind in [(name, kind) for name in ["RELEASE.txt", "xdrive", "install.sh", "upgrade.sh", "uninstall.sh"]
+        for name, kind in [(name, kind) for name in ["RELEASE.txt", "xdrive", "install.sh", "upgrade.sh", "uninstall.sh", "THIRD_PARTY_NOTICES.txt", "LGPL-3.0-heic-to.txt"]
                            for kind in [tarfile.DIRTYPE, tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE]]:
             with self.subTest(name=name, kind=kind):
                 self.bundle.write_bytes(original)

@@ -236,15 +236,15 @@ expected_digest=$(printf '%s' "$expected_digest" | tr '[:upper:]' '[:lower:]')
 if ! LC_ALL=C tar -tvzf "$archive" | LC_ALL=C awk '
   BEGIN { valid = 1 }
   substr($0, 1, 1) != "-" { valid = 0 }
-  END { exit (!valid || NR != 5) }
+  END { exit (!valid || NR != 7) }
 '; then
   printf 'Release archive has invalid file types. No installation changes were made.\n' >&2
   exit 1
 fi
 archive_members=$(tar -tzf "$archive" | LC_ALL=C sort)
-[[ $archive_members == $'RELEASE.txt\ninstall.sh\nuninstall.sh\nupgrade.sh\nxdrive' ]] || { printf 'Release archive has unexpected paths.\n' >&2; exit 1; }
+[[ $archive_members == $'LGPL-3.0-heic-to.txt\nRELEASE.txt\nTHIRD_PARTY_NOTICES.txt\ninstall.sh\nuninstall.sh\nupgrade.sh\nxdrive' ]] || { printf 'Release archive has unexpected paths.\n' >&2; exit 1; }
 tar -C "$temporary_dir" -xzf "$archive"
-[[ -f $temporary_dir/xdrive && ! -L $temporary_dir/xdrive && -f $temporary_dir/upgrade.sh && ! -L $temporary_dir/upgrade.sh && -f $temporary_dir/uninstall.sh && ! -L $temporary_dir/uninstall.sh && -f $temporary_dir/RELEASE.txt && ! -L $temporary_dir/RELEASE.txt ]] || {
+[[ -f $temporary_dir/xdrive && ! -L $temporary_dir/xdrive && -f $temporary_dir/upgrade.sh && ! -L $temporary_dir/upgrade.sh && -f $temporary_dir/uninstall.sh && ! -L $temporary_dir/uninstall.sh && -f $temporary_dir/RELEASE.txt && ! -L $temporary_dir/RELEASE.txt && -f $temporary_dir/THIRD_PARTY_NOTICES.txt && ! -L $temporary_dir/THIRD_PARTY_NOTICES.txt && -f $temporary_dir/LGPL-3.0-heic-to.txt && ! -L $temporary_dir/LGPL-3.0-heic-to.txt ]] || {
   printf 'Release archive has invalid file types.\n' >&2; exit 1;
 }
 grep -Fxq 'os=linux' "$temporary_dir/RELEASE.txt" || { printf 'Release is not for Linux.\n' >&2; exit 1; }

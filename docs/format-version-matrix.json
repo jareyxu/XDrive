@@ -2,27 +2,32 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v1.3.4",
+    "version": "v1.3.5",
     "reviewedAt": "2026-10-09",
     "reviewer": "User attestation in project conversation; personal identity not provided",
     "evidence": [
       "The user confirmed completion of the previously open backup/restore compatibility rehearsal and independent security review plus second format review. Reviewer identity and underlying private review material are not published in this repository.",
-      "V1.3.4 adds an authenticated web download for the existing backup container. The archive test checks the generated tar with VerifyGeneration and restores it through RestoreGeneration; the web handler test covers CSRF, origin, session-bound one-use tickets, and streaming response headers.",
-      "V1.3.4 does not change encrypted payloads, key derivation, AAD, metadata transactions, SQLite schema, backup container version, or client mutation protocol from v1.3.3."
+      "V1.3.5 adds local HEIC/HEIF image preview and thumbnail conversion. Original files remain stored with the existing client-side encryption; this release does not change encrypted payloads, key derivation, AAD, metadata transactions, SQLite schema, backup container version, or client mutation protocol.",
+      "The HEIC decoder is lazy-loaded locally, bounded by a 32 MiB input limit, and distributed with its LGPL-3.0 license notice and license text. Release validation covers the HEIC unit tests, frontend build, full project checks, and Linux amd64/arm64 package contents."
     ]
   },
-  "scope": "XDrive V1.3.4 persistent and client mutation formats, unchanged from V1.3.3",
+  "scope": "XDrive V1.3.5 HEIC/HEIF local preview and thumbnail support; persistent formats and mutation protocol unchanged from V1.3.4",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,
-      "readVersions": [1],
+      "readVersions": [
+        1
+      ],
       "cipherId": 1,
       "cipher": "AES-256-GCM",
       "unknownVersion": "reject"
     },
     "vaultConfigAndKeySlotAad": {
       "writeVersion": 2,
-      "readVersions": [1, 2],
+      "readVersions": [
+        1,
+        2
+      ],
       "unknownVersion": "reject",
       "meaning": {
         "1": "legacy direct Vault Key file and thumbnail derivation",
@@ -34,7 +39,10 @@
         "1": 1,
         "2": 2
       },
-      "readVersions": [1, 2],
+      "readVersions": [
+        1,
+        2
+      ],
       "missingDirectoryEntryVersion": 1,
       "unknownVersion": "reject"
     },
@@ -42,20 +50,52 @@
       "domainPrefix": "xdrive/v1/",
       "integerByteOrder": "big-endian",
       "variableFieldLengthPrefixBytes": 4,
-      "keySlotFormatVersions": [1, 2],
-      "chunkManifestThumbnailCryptoVersions": [1, 2],
+      "keySlotFormatVersions": [
+        1,
+        2
+      ],
+      "chunkManifestThumbnailCryptoVersions": [
+        1,
+        2
+      ],
       "indexVersion": 1,
       "localStateVersion": 1
     },
     "directoryIndex": {
       "writeVersion": 1,
-      "readVersions": [1],
-      "rootRequiredFields": ["version", "indexId", "entries"],
-      "folderEntryRequiredFields": ["entryId", "kind", "name", "childIndexId"],
-      "fileEntryRequiredFields": ["entryId", "kind", "name", "size", "mime", "fileId", "manifestObjectId", "manifestSha256"],
+      "readVersions": [
+        1
+      ],
+      "rootRequiredFields": [
+        "version",
+        "indexId",
+        "entries"
+      ],
+      "folderEntryRequiredFields": [
+        "entryId",
+        "kind",
+        "name",
+        "childIndexId"
+      ],
+      "fileEntryRequiredFields": [
+        "entryId",
+        "kind",
+        "name",
+        "size",
+        "mime",
+        "fileId",
+        "manifestObjectId",
+        "manifestSha256"
+      ],
       "optionalEntryFields": {
-        "allEntries": ["originalModifiedAt", "createdAt"],
-        "fileEntries": ["fileCryptoVersion", "thumbnail"]
+        "allEntries": [
+          "originalModifiedAt",
+          "createdAt"
+        ],
+        "fileEntries": [
+          "fileCryptoVersion",
+          "thumbnail"
+        ]
       },
       "missingFileCryptoVersion": 1,
       "missingTimestamps": "unknown; do not infer",
@@ -63,27 +103,73 @@
     },
     "trashIndex": {
       "writeVersion": 1,
-      "readVersions": [1],
-      "rootRequiredFields": ["version", "indexId", "entries"],
-      "entryRequiredFields": ["tombstoneId", "item", "originalParentId", "originalPath", "deletedAt"],
-      "originalPathEntryRequiredFields": ["indexId", "childIndexId", "name"],
+      "readVersions": [
+        1
+      ],
+      "rootRequiredFields": [
+        "version",
+        "indexId",
+        "entries"
+      ],
+      "entryRequiredFields": [
+        "tombstoneId",
+        "item",
+        "originalParentId",
+        "originalPath",
+        "deletedAt"
+      ],
+      "originalPathEntryRequiredFields": [
+        "indexId",
+        "childIndexId",
+        "name"
+      ],
       "unknownFieldsOrVersions": "reject"
     },
     "fileManifest": {
       "currentWriteVersion": 3,
-      "readSchemaVersions": [1, 2, 3],
+      "readSchemaVersions": [
+        1,
+        2,
+        3
+      ],
       "legacyVersions1And2Mean": "fileCryptoVersion",
-      "legacyOptionalFields": ["chunkSize", "thumbnail"],
+      "legacyOptionalFields": [
+        "chunkSize",
+        "thumbnail"
+      ],
       "legacyMissingChunkSizeBytes": 8388608,
-      "schema3RequiredFields": ["version", "fileCryptoVersion", "fileId", "size", "chunkSize", "chunkCount", "mime", "originalModifiedAt", "chunks", "thumbnail"],
-      "schema3ChunkFields": ["index", "objectId", "plaintextSize", "sha256"],
-      "schema3OptionalFields": ["media"],
+      "schema3RequiredFields": [
+        "version",
+        "fileCryptoVersion",
+        "fileId",
+        "size",
+        "chunkSize",
+        "chunkCount",
+        "mime",
+        "originalModifiedAt",
+        "chunks",
+        "thumbnail"
+      ],
+      "schema3ChunkFields": [
+        "index",
+        "objectId",
+        "plaintextSize",
+        "sha256"
+      ],
+      "schema3OptionalFields": [
+        "media"
+      ],
       "schema3MissingThumbnail": "invalid; use explicit null",
       "unknownFieldsOrVersions": "reject"
     },
     "uploadRecoveryPayload": {
       "currentWriteVersion": 4,
-      "readVersions": [1, 2, 3, 4],
+      "readVersions": [
+        1,
+        2,
+        3,
+        4
+      ],
       "versions1To3MissingFileCryptoVersion": 1,
       "version3ThumbnailWriteAhead": true,
       "version4FileCryptoVersionRequired": true,
@@ -94,12 +180,17 @@
     "localState": {
       "indexedDbName": "xdrive-local-v1",
       "aadVersion": 1,
-      "recordTypes": ["upload-resume", "revision-baseline"],
+      "recordTypes": [
+        "upload-resume",
+        "revision-baseline"
+      ],
       "plaintextPolicy": "encrypted with K_local before IndexedDB persistence"
     },
     "backup": {
       "writeFormatVersion": 1,
-      "readFormatVersions": [1],
+      "readFormatVersions": [
+        1
+      ],
       "snapshotSchemaRange": {
         "minimum": 2,
         "maximum": 7

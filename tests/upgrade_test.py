@@ -7,12 +7,15 @@ SQLite migrations, Linux deployment, HTTPS or crash/power-loss acceptance.
 import hashlib
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import tarfile
 import tempfile
 import unittest
 from release_archive_fixture import observe_extraction, replace_member_type
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class UpgradeTests(unittest.TestCase):
@@ -65,9 +68,11 @@ esac
         (self.release / "RELEASE.txt").write_text("os=linux\narchitecture=amd64\nversion=v1.3.1\n")
         for helper in ["install.sh", "upgrade.sh", "uninstall.sh"]:
             (self.release / helper).write_text("new " + helper + "\n")
+        for name in ["THIRD_PARTY_NOTICES.txt", "LGPL-3.0-heic-to.txt"]:
+            shutil.copy2(ROOT / name, self.release / name)
         self.bundle = self.root / "release.tar.gz"
         with tarfile.open(self.bundle, "w:gz") as archive:
-            for name in ["RELEASE.txt", "install.sh", "uninstall.sh", "upgrade.sh", "xdrive"]:
+            for name in ["RELEASE.txt", "install.sh", "uninstall.sh", "upgrade.sh", "xdrive", "THIRD_PARTY_NOTICES.txt", "LGPL-3.0-heic-to.txt"]:
                 archive.add(self.release / name, arcname=name)
         self.digest = hashlib.sha256(self.bundle.read_bytes()).hexdigest()
         self.commands = self.root / "commands"
@@ -398,7 +403,7 @@ if ! grep -q 'being upgraded' "$TEST_SITE" && [[ ${TEST_FAIL_PROXY_VALIDATE:-0} 
         extracted = observe_extraction(self.root, self.commands)
         target = self.root / "outside"
         target.write_bytes(b"outside-preserved")
-        for name, kind in [(name, kind) for name in ["RELEASE.txt", "xdrive", "install.sh", "upgrade.sh", "uninstall.sh"]
+        for name, kind in [(name, kind) for name in ["RELEASE.txt", "xdrive", "install.sh", "upgrade.sh", "uninstall.sh", "THIRD_PARTY_NOTICES.txt", "LGPL-3.0-heic-to.txt"]
                            for kind in [tarfile.DIRTYPE, tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE]]:
             with self.subTest(name=name, kind=kind):
                 self.bundle.write_bytes(original)

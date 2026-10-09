@@ -1,5 +1,6 @@
 import { imageDimensions, THUMBNAIL_MAX_BYTES, THUMBNAIL_MAX_EDGE } from './thumbnail-schema'
 import { takeArrayBufferBytes } from '../crypto/encoding'
+import { convertHeicToJpeg, HEIC_MAX_DECODE_BYTES, isHeicImage } from './heic'
 export interface GeneratedThumbnail { bytes: Uint8Array; mime: 'image/webp' | 'image/jpeg'; width: number; height: number }
 const maxPixels = 32 * 1024 * 1024
 // Native bitmap decoding cannot be aborted. Keep its slot occupied until the
@@ -55,6 +56,14 @@ async function encode(source: CanvasImageSource, width: number, height: number, 
 export async function generateThumbnail(file: File, signal?: AbortSignal): Promise<GeneratedThumbnail | null> {
  signal?.throwIfAborted()
  try {
+  if (isHeicImage(file.name, file.type)) {
+   if (file.size > HEIC_MAX_DECODE_BYTES) return null
+   const converted = await convertHeicToJpeg(file, THUMBNAIL_MAX_EDGE, signal)
+   if (converted.blob.size > THUMBNAIL_MAX_BYTES) return null
+   const bytes = takeArrayBufferBytes(await converted.blob.arrayBuffer())
+   if (signal?.aborted) { bytes.fill(0); signal.throwIfAborted() }
+   return { bytes, mime: 'image/jpeg', width: converted.width, height: converted.height }
+  }
   if (['image/png', 'image/jpeg', 'image/webp'].includes(file.type)) {
    if (file.size > 32 * 1024 * 1024 || typeof createImageBitmap !== 'function') return null
    const header = takeArrayBufferBytes(await file.slice(0, 128 * 1024).arrayBuffer())

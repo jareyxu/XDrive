@@ -88,6 +88,7 @@ import { assertPasswordLength } from './crypto/kdf'
 import { assertOriginalFile } from './uploads/resume'
 import type { ActiveTransfer, RecoverableTransfer, TransferPhase } from './transfers/transfer-types'
 import { textPreviewKind } from './media/text-preview'
+import { convertHeicToJpeg, isHeicImage } from './media/heic'
 import './App.css'
 
 const SettingsScreen = lazy(() => import('./components/SettingsScreen').then(module => ({ default: module.SettingsScreen })))
@@ -104,6 +105,11 @@ interface PreviewState {
   readonly kind: 'image' | 'video' | 'text' | 'markdown' | 'code' | 'pdf'
   readonly url?: string
   readonly text?: string
+  readonly sourceBlob?: Blob
+  readonly isHeic?: boolean
+  readonly heicFallbackAttempted?: boolean
+  readonly heicDecoding?: boolean
+  readonly imageError?: string
 }
 
 function App() {
@@ -739,10 +745,11 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
     cancelPendingPreview()
     const mime = entry.mime ?? 'application/octet-stream'
     const ext = entry.name.split('.').at(-1)?.toLowerCase() ?? ''
+    const isHeic = isHeicImage(entry.name, mime)
     const textKind = textPreviewKind(entry.name, mime)
     const isText = textKind !== null
     const isPdf = mime === 'application/pdf' || ext === 'pdf'
-    if (!isText && !isPdf && !mime.startsWith('image/') && !mime.startsWith('video/')) {
+    if (!isText && !isPdf && !mime.startsWith('image/') && !isHeic && !mime.startsWith('video/')) {
       setUploadError('此文件类型暂不支持预览，请下载后打开。')
       return
     }
@@ -782,9 +789,10 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
         setPreview({ entry, kind: textKind, text })
       }
       else {
-        const url = URL.createObjectURL(blob)
+        const imageBlob = isHeic ? new Blob([blob], { type: 'image/heic' }) : blob
+        const url = URL.createObjectURL(imageBlob)
         downloadURLs.current.add(url)
-        setPreview({ entry, kind: 'image', url })
+        setPreview({ entry, kind: 'image', url, ...(isHeic ? { sourceBlob: imageBlob, isHeic: true } : {}) })
       }
       setUploadMessage('')
     } catch (cause) {
@@ -803,6 +811,36 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
       downloadURLs.current.delete(preview.url)
     }
     setPreview(null)
+  }
+  const handlePreviewImageError = (failedPreview: PreviewState) => {
+    if (preview?.url !== failedPreview.url || !failedPreview.url || failedPreview.heicDecoding) return
+    if (!failedPreview.isHeic || failedPreview.heicFallbackAttempted || !failedPreview.sourceBlob) {
+      setPreview(current => current && current.url === failedPreview.url ? { ...current, imageError: '浏览器无法显示此图片，请下载原文件查看。' } : current)
+      return
+    }
+    const controller = new AbortController()
+    const request = { controller, entry: failedPreview.entry }
+    previewRequest.current = request
+    taskControllers.current.add(controller)
+    setPreview(current => current && current.url === failedPreview.url ? { ...current, heicDecoding: true, imageError: undefined } : current)
+    void convertHeicToJpeg(failedPreview.sourceBlob, 4096, controller.signal).then(({ blob }) => {
+      if (!screenActive.current || controller.signal.aborted || previewRequest.current !== request) return
+      const url = URL.createObjectURL(blob)
+      downloadURLs.current.add(url)
+      URL.revokeObjectURL(failedPreview.url!)
+      downloadURLs.current.delete(failedPreview.url!)
+      setPreview(current => current && current.url === failedPreview.url
+        ? { ...current, url, sourceBlob: undefined, heicFallbackAttempted: true, heicDecoding: false, imageError: undefined }
+        : current)
+    }).catch(cause => {
+      if (controller.signal.aborted || previewRequest.current !== request) return
+      setPreview(current => current && current.url === failedPreview.url
+        ? { ...current, heicFallbackAttempted: true, heicDecoding: false, imageError: cause instanceof Error ? cause.message : '无法解码 HEIC 图片，请下载原文件查看。' }
+        : current)
+    }).finally(() => {
+      taskControllers.current.delete(controller)
+      if (previewRequest.current === request) previewRequest.current = null
+    })
   }
   const openFolder = (entry: (typeof entries)[number]) => {
     if (entry.kind !== 'folder' || !entry.childIndexId) return
@@ -1595,7 +1633,7 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
       if (action === 'download') void handleDownload(entry)
     }} />}
     {clearTrashIds && <ClearTrashDialog selected={clearTrashMode === 'selected'} count={clearTrashIds.length} onConfirm={() => void handleClearTrash()} onCancel={closeClearTrash} />}
-    {preview && <PreviewDialog preview={preview} vault={props.vault} holdIdleLock={props.holdIdleLock} onClose={closePreview} onDownload={() => void handleDownload(preview.entry)} />}
+    {preview && <PreviewDialog preview={preview} vault={props.vault} holdIdleLock={props.holdIdleLock} onClose={closePreview} onImageError={handlePreviewImageError} onDownload={() => void handleDownload(preview.entry)} />}
     {changePasswordOpen && <ChangePasswordDialog vault={props.vault} onClose={() => setChangePasswordOpen(false)} onChanged={(updated) => { props.onVaultUpdate(updated); setChangePasswordOpen(false); setUploadMessage('密码已修改。其他设备上的登录已失效。') }} />}
     {deleteSelections && <DeleteSelectionDialog count={deleteSelections.length} onCancel={closeDeleteSelection} onConfirm={() => void handleDeleteSelection()} />}
     {movingSelections.length > 0 && <MoveDialog vault={props.vault} selections={movingSelections} entries={movingSelections.map((item) => item.entry)} onClose={() => setMovingSelections([])} onMove={handleMoveToTarget} />}
@@ -1713,7 +1751,7 @@ function TrashView(props: {
   </>
 }
 
-function PreviewDialog(props: { preview: PreviewState; vault: UnlockedVault; holdIdleLock: (kind: IdleLockTask) => () => void; onClose: () => void; onDownload: () => void }) {
+function PreviewDialog(props: { preview: PreviewState; vault: UnlockedVault; holdIdleLock: (kind: IdleLockTask) => () => void; onClose: () => void; onImageError: (preview: PreviewState) => void; onDownload: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     const element = dialog.current
@@ -1724,7 +1762,11 @@ function PreviewDialog(props: { preview: PreviewState; vault: UnlockedVault; hol
     {props.preview.kind === 'text' && <pre className="preview-text">{props.preview.text}</pre>}
     {props.preview.kind === 'markdown' && <Suspense fallback={<p role="status">正在加载 Markdown 预览…</p>}><MarkdownPreview source={props.preview.text ?? ''} /></Suspense>}
     {props.preview.kind === 'code' && <Suspense fallback={<p role="status">正在加载代码预览…</p>}><CodePreview key={props.preview.entry.entryId} source={props.preview.text ?? ''} name={props.preview.entry.name} mime={props.preview.entry.mime ?? ''} /></Suspense>}
-    {props.preview.kind === 'image' && props.preview.url && <img className="preview-image" src={props.preview.url} alt={props.preview.entry.name} />}
+    {props.preview.kind === 'image' && props.preview.url && <>
+      <img className="preview-image" src={props.preview.url} alt={props.preview.entry.name} onError={() => props.onImageError(props.preview)} />
+      {props.preview.heicDecoding && <p role="status">正在本机解码 HEIC 图片…</p>}
+      {props.preview.imageError && <p role="alert">{props.preview.imageError}</p>}
+    </>}
     {props.preview.kind === 'video' && <VideoPreview key={props.preview.entry.entryId} vault={props.vault} entry={props.preview.entry} holdIdleLock={props.holdIdleLock} />}
     {props.preview.kind === 'pdf' && <PDFPreview vault={props.vault} entry={props.preview.entry} />}
   </dialog>

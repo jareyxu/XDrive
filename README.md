@@ -2,13 +2,13 @@
 
 **XDrive 是一款可自行托管的个人云盘。文件在浏览器内加密后再上传，服务端保存密文。**
 
-> **当前稳定版：v1.3.4。** 本版在设置页增加可下载的完整备份；备份格式兼容现有 `verify-backup` 和 `restore` 命令，不更改文件、元数据或客户端加密格式。首次部署前仍应配置异地备份并完成恢复演练。
+> **当前稳定版：v1.3.5。** 本版支持 HEIC/HEIF 图片预览与缩略图；原始图片仍以原有客户端加密格式存储，解码器仅在需要时于本机加载。
 
 ## 功能
 
 - 单用户、自托管的 Web 云盘，可部署在自己的 Linux VPS。
 - 浏览器端加密文件及目录索引；服务器不保存文件名、文件夹名或文件内容的明文副本。
-- 文件和文件夹管理、上传续传、回收站、图片与视频预览，以及 PDF、文本、Markdown 和代码预览。
+- 文件和文件夹管理、上传续传、回收站、图片与视频预览，以及 PDF、文本、Markdown 和代码预览。HEIC/HEIF 图片保留原文件加密存储；本机浏览器无法原生显示时，使用按需加载的本地解码器生成预览和缩略图，解码输入上限为 32 MiB。
 - 流式单文件下载和 ZIP64 文件夹导出。
 - 本地 SQLite 与文件系统存储；部署可使用现有 Nginx 或 Caddy。无需 Docker。
 
@@ -20,7 +20,7 @@ XDrive 在浏览器中使用 Argon2id 派生密钥，并使用 AES-256-GCM 加�
 
 ## 安装与部署
 
-从 [GitHub Releases](https://github.com/jareyxu/XDrive/releases/tag/v1.3.4) 下载稳定版安装包与 `SHA256SUMS`。选择与你的 VPS 架构相符的 `amd64` 或 `arm64` 包；校验归档后解压其中的 `install.sh`，再按提示安装。
+从 [GitHub Releases](https://github.com/jareyxu/XDrive/releases/tag/v1.3.5) 下载稳定版安装包与 `SHA256SUMS`。选择与你的 VPS 架构相符的 `amd64` 或 `arm64` 包；校验归档后解压其中的 `install.sh`，再按提示安装。
 
 安装时提供域名、管理员用户名、数据目录和反向代理。若使用已有 Nginx 网站，可选择 `--proxy nginx`，安装器会为 XDrive 增加独立虚拟主机；也可以选择 Caddy。建议使用独立子域名（例如 `drive.example.com`），目前不支持挂载在 `example.com/drive` 这样的 URL 子路径下。已安装旧候选版的用户应先备份并校验备份，再使用对应版本包内的升级脚本。
 
@@ -52,4 +52,4 @@ make build
 
 ## 许可证
 
-XDrive 采用 [MIT License](LICENSE)。
+XDrive 自有代码采用 [MIT License](LICENSE)。HEIC/HEIF 本地解码使用 heic-to 1.6.5（LGPL-3.0）；详见 [第三方许可说明](THIRD_PARTY_NOTICES.txt) 和随发行包提供的许可证文本。
