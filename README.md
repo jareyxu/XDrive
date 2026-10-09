@@ -2,7 +2,7 @@
 
 **XDrive 是一款可自行托管的个人云盘。文件在浏览器内加密后再上传，服务端保存密文。**
 
-> **当前稳定版：v1.3.1。** 本版本已通过项目记录的备份恢复与格式兼容、存储一致性与故障恢复、独立安全审查及稳定发布门禁。首次部署前仍应按下方说明配置异地备份并完成恢复演练。
+> **当前稳定版：v1.3.2。** 本版本不更改 v1.3.1 已冻结的文件、元数据和备份格式；网页更新功能在本版新增并通过自动化测试。首次部署前仍应配置异地备份并完成恢复演练。
 
 ## 功能
 
@@ -20,13 +20,13 @@ XDrive 在浏览器中使用 Argon2id 派生密钥，并使用 AES-256-GCM 加�
 
 ## 安装与部署
 
-从 [GitHub Releases](https://github.com/jareyxu/XDrive/releases/tag/v1.3.1) 下载稳定版安装包与 `SHA256SUMS`。选择与你的 VPS 架构相符的 `amd64` 或 `arm64` 包；校验归档后解压其中的 `install.sh`，再按提示安装。
+从 [GitHub Releases](https://github.com/jareyxu/XDrive/releases/tag/v1.3.2) 下载稳定版安装包与 `SHA256SUMS`。选择与你的 VPS 架构相符的 `amd64` 或 `arm64` 包；校验归档后解压其中的 `install.sh`，再按提示安装。
 
 安装时提供域名、管理员用户名、数据目录和反向代理。若使用已有 Nginx 网站，可选择 `--proxy nginx`，安装器会为 XDrive 增加独立虚拟主机；也可以选择 Caddy。建议使用独立子域名（例如 `drive.example.com`），目前不支持挂载在 `example.com/drive` 这样的 URL 子路径下。已安装旧候选版的用户应先备份并校验备份，再使用对应版本包内的升级脚本。
 
-Linux 安装脚本目前面向 Ubuntu 24.04 或 Debian 12（amd64／arm64），可配置 Nginx 或 Caddy。Nginx 模式会为 XDrive 添加独立的虚拟主机，不会改写原有网站配置。使用子域名（例如 `drive.example.com`）；当前不支持把应用挂在 `example.com/drive` 这样的 URL 子路径下。安装与升级仍处于实验阶段；请勿在未备份的 VPS 上尝试。
+Linux 安装脚本目前面向 Ubuntu 24.04 或 Debian 12（amd64／arm64），可配置 Nginx 或 Caddy。Nginx 模式会为 XDrive 添加独立的虚拟主机，不会改写原有网站配置。使用子域名（例如 `drive.example.com`）；当前不支持把应用挂在 `example.com/drive` 这样的 URL 子路径下。升级前请创建并验证外部备份；不要在没有可用备份时执行升级。
 
-设置页的可视化稳定版更新功能将在包含该功能的后续发行版中提供。新安装会自动配置独立的 root systemd 更新任务；从 v1.3.1 手动升级到首个包含该功能的版本后，需要以 root 运行一次 `xdrive enable-web-updates`。更新按钮会显示官方 GitHub 发布页并要求再次确认；服务器只安装该仓库的最新稳定版，并核对该发布页提供的 SHA-256 清单。归档与清单来自同一 GitHub 发布源，此检查不等于独立离线签名；使用此功能需要 VPS 能通过 HTTPS 访问 GitHub，并信任 XDrive 的 GitHub 发布账号。
+设置页现已支持检查并安装 GitHub 上的最新稳定版。新安装会自动配置独立的 root systemd 更新任务；从 v1.3.1 手动升级到 v1.3.2 后，需要以 root 运行一次 `xdrive enable-web-updates`。更新按钮会显示官方 GitHub 发布页并要求再次确认；服务器只安装该仓库的最新稳定版，并核对该发布页提供的 SHA-256 清单。归档与清单来自同一 GitHub 发布源，此检查不等于独立离线签名；使用此功能需要 VPS 能通过 HTTPS 访问 GitHub，并信任 XDrive 的 GitHub 发布账号。
 
 ## 本地开发
 

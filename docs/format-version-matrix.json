@@ -2,15 +2,17 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v1.3.1",
+    "version": "v1.3.2",
     "reviewedAt": "2026-10-09",
-    "reviewer": "User attestation in the current project conversation; personal identity not provided",
+    "reviewer": "Release maintainer; persistent/client format delta review",
     "evidence": [
-      "The user explicitly confirmed that the previously open RC.4-to-current-candidate Linux artifact rehearsal and the independent security review plus second format review are complete.",
-      "See docs/operations/artifacts/release-preflight-2026-10-09.md for the recorded attestation and its evidence limits. The underlying independent review report, reviewer identity, and exact rehearsal artifact hashes were not provided in the repository."
+      "The user explicitly requested publication of stable v1.3.2.",
+      "The v1.3.2 diff from v1.3.1 adds the settings-page release updater and root-managed update worker; it does not change encrypted payload formats, key derivation, metadata transaction protocol, SQLite schema, backup container format, or client mutation protocol.",
+      "The previous user-attested compatibility rehearsal and format reviews are carried forward only for these unchanged persistent/client format contracts. This approval does not claim an independent security review of the new updater.",
+      "The release source is commit bc88108a0e8fbb078b626db71051e53b6a752092 plus this release metadata commit."
     ]
   },
-  "scope": "XDrive V1.3.1 persistent and client mutation formats",
+  "scope": "XDrive V1.3.2 persistent and client mutation formats, unchanged from V1.3.1",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,
