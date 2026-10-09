@@ -33,10 +33,17 @@ scripts-check:
 	python3 tests/client_protocol_contract_test.py
 	python3 tests/error_catalog_contract_test.py
 	python3 tests/persistent_format_contract_test.py
-	python3 tests/uninstall_test.py
-	python3 tests/install_preflight_test.py
-	python3 tests/install_completion_test.py
-	python3 tests/upgrade_test.py
+	@set -u; \
+	test_logs=$$(mktemp -d); \
+	trap 'rm -rf "$$test_logs"' EXIT; \
+	python3 tests/uninstall_test.py >"$$test_logs/uninstall.log" 2>&1 & uninstall_pid=$$!; \
+	python3 tests/install_preflight_test.py >"$$test_logs/install-preflight.log" 2>&1 & preflight_pid=$$!; \
+	python3 tests/install_completion_test.py >"$$test_logs/install-completion.log" 2>&1 & completion_pid=$$!; \
+	python3 tests/upgrade_test.py >"$$test_logs/upgrade.log" 2>&1 & upgrade_pid=$$!; \
+	status=0; \
+	for pid in "$$uninstall_pid" "$$preflight_pid" "$$completion_pid" "$$upgrade_pid"; do wait "$$pid" || status=1; done; \
+	for log in uninstall install-preflight install-completion upgrade; do cat "$$test_logs/$$log.log"; done; \
+	exit "$$status"
 	python3 -c 'import ast, pathlib; ast.parse(pathlib.Path("scripts/backup_resource_check.py").read_text())'
 
 # Optional validation only; Docker is not the deployment architecture.
