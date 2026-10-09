@@ -9,7 +9,8 @@
       "The user explicitly requested publication of stable v1.3.2.",
       "The v1.3.2 diff from v1.3.1 adds the settings-page release updater and root-managed update worker; it does not change encrypted payload formats, key derivation, metadata transaction protocol, SQLite schema, backup container format, or client mutation protocol.",
       "The previous user-attested compatibility rehearsal and format reviews are carried forward only for these unchanged persistent/client format contracts. This approval does not claim an independent security review of the new updater.",
-      "The release source is commit bc88108a0e8fbb078b626db71051e53b6a752092 plus this release metadata commit."
+      "The v1.3.2 source includes updater implementation commit bc88108a0e8fbb078b626db71051e53b6a752092, release metadata commit 6596dff, and updater API error-guidance fix commit f507482, plus this release-gate evidence update.",
+      "These changes leave persisted data formats and client mutation contracts unchanged from v1.3.1. This approval carries forward only the prior compatibility evidence and does not claim an independent security review of the new updater."
     ]
   },
   "scope": "XDrive V1.3.2 persistent and client mutation formats, unchanged from V1.3.1",
