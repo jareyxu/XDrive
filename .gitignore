@@ -19,6 +19,34 @@ coverage/
 
 # Local validation logs, browser traces, VM state, and generated fixtures
 /output/
+# Local test evidence and generated browser/resource validation artifacts.
+/docs/operations/artifacts/
+# Internal design, planning, and verification documents are kept locally.
+# This applies to new files only; already-tracked docs still need explicit staging control.
+/docs/
+# Internal implementation plan; keep it in the local workspace only.
+/plan.md
+# New verification-only sources and reports remain in this local workspace.
+# Existing tracked tests are still tracked; keep their changes out of commits explicitly.
+/internal/backup/backup_resource_test.go
+/internal/server/maintenance_recycle_test.go
+/internal/server/system_update_test.go
+/internal/update/release_test.go
+/internal/update/worker_test.go
+/scripts/backup_resource_check.py
+/tests/error_catalog_contract_test.py
+/tests/release_format_gate_test.py
+/tests/requirements_traceability_contract_test.py
+/web/e2e/folder-input.pw.ts
+/web/e2e/recovery-record-bound.pw.ts
+/web/e2e/setup-error-recovery.pw.ts
+/web/folder-resource-benchmark.html
+/web/scripts/folder_selection_resource_check.mjs
+/web/src/api/create-vault-lifecycle.test.ts
+/web/src/api/system-update.test.ts
+/web/src/components/SettingsScreen.update.test.tsx
+/web/src/crypto/digest.test.ts
+/web/src/uploads/folder-input.test.ts
 # Playwright traces can contain page snapshots (including decrypted test data)
 # and are retained only in the local validation workspace.
 /docs/operations/artifacts/**/trace.zip

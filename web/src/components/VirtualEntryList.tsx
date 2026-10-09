@@ -11,7 +11,7 @@ interface Props<T> {
   className?: string
 }
 const touchQuery = '(pointer: coarse), (max-width: 760px)'
-function currentRowHeight(): number { return typeof matchMedia === 'function' && matchMedia(touchQuery).matches ? 56 : 36 }
+function currentRowHeight(): number { return typeof matchMedia === 'function' && matchMedia(touchQuery).matches ? 56 : 44 }
 export function VirtualEntryList<T>({ entries, itemKey, renderEntry, label = '文件列表', className = '' }: Props<T>) {
   'use no memo' // TanStack Virtual exposes a mutable instance; keep this boundary uncompiled.
   const viewport = useRef<HTMLDivElement>(null)

@@ -1490,22 +1490,22 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
   const renderDriveListEntry = (entry: DriveEntry) => {
     const drop = dropFeedback?.entryId === entry.entryId ? dropFeedback : null
     const modified = formatEntryModifiedAt(entry.originalModifiedAt)
-    const size = entry.kind === 'folder' ? '文件夹' : formatBytes(entry.size ?? 0)
+    const size = entry.kind === 'folder' ? '—' : formatBytes(entry.size ?? 0)
     const kind = entry.kind === 'folder' ? '文件夹' : entry.mime ?? '未知'
     return <div className={`entry-row drive-list-row${selectedEntryId === entry.entryId || batchIds.has(entry.entryId) ? ' is-selected' : ''}${drop ? ` is-drop-target is-drop-${drop.state}` : ''}`} role="listitem" draggable={!writeBlocked && !uploading && !folderLoading} onDragStart={event => startEntryDrag(event, entry)} onDragOver={event => enterFolderDrop(event, entry)} onDragLeave={event => leaveFolderDrop(event, entry)} onDrop={event => void dropIntoFolder(event, entry)} onDragEnd={clearMoveDrag} tabIndex={0} key={entry.entryId} onPointerDown={event => longPress.down(event, entry.entryId)} onPointerMove={longPress.move} onPointerUp={longPress.up} onPointerCancel={longPress.cancel} onClickCapture={event => selectionClick(event, entry)} onFocus={() => selection.focus(entry.entryId)} onKeyDown={event => handleRowKeyDown(event, entry)}>
       <input className="entry-select" type="checkbox" aria-label={`选择 ${entry.name}`} checked={batchIds.has(entry.entryId)} onChange={(event) => { selection.check({ entry, parentIndexId: directory.indexId, parentPath: directory.path }, event.target.checked) }} />
       <span className="entry-icon">{entry.kind === 'folder' ? <Folder size={18} /> : <File size={18} />}</span>
-      {entry.kind === 'folder' ? <button aria-label={entry.name} className="entry-name entry-name-button drive-list-name" onClick={() => void openFolder(entry)}>{entry.name}<span className="drive-list-mobile-meta">{size} · {modified}</span></button> : <button aria-label={entry.name} className="entry-name entry-name-button drive-list-name" onClick={() => void handlePreview(entry)}>{entry.name}<span className="drive-list-mobile-meta">{size} · {modified}</span></button>}
+      {entry.kind === 'folder' ? <button aria-label={entry.name} title={entry.name} className="entry-name entry-name-button drive-list-name" onClick={() => void openFolder(entry)}>{entry.name}<span className="drive-list-mobile-meta">{size} · {modified}</span></button> : <button aria-label={entry.name} title={entry.name} className="entry-name entry-name-button drive-list-name" onClick={() => void handlePreview(entry)}>{entry.name}<span className="drive-list-mobile-meta">{size} · {modified}</span></button>}
       <span className="drive-list-modified" aria-label={`原始修改时间 ${modified}`}>{modified}</span>
       <span className="entry-kind drive-list-size">{size}</span>
       <span className="drive-list-mime" title={kind}>{kind}</span>
       <span className="entry-row-actions">
-        {directory.path.length > 0 && <button type="button" className="entry-download" aria-label={`移动到上一级 ${entry.name}`} disabled={writeBlocked} onClick={() => void handleMoveToParent(entry.entryId)}><CornerUpLeft size={15} /></button>}
-        <button type="button" className="entry-download" aria-label={`移动 ${entry.name}`} disabled={writeBlocked} onClick={() => setMovingSelections([{ entry, parentIndexId: directory.indexId, parentPath: directory.path }])}><MoveRight size={15} /></button>
-        <button type="button" className="entry-download" aria-label={`重命名 ${entry.name}`} disabled={writeBlocked} onClick={() => void handleRename(entry.entryId)}><FilePenLine size={15} /></button>
-        <button type="button" className="entry-download" aria-label={`移到回收站 ${entry.name}`} disabled={writeBlocked} onClick={() => void handleDelete(entry.entryId)}><Trash2 size={15} /></button>
-        {entry.kind === 'file' && <button type="button" className="entry-download" aria-label={`下载 ${entry.name}`} onClick={() => void handleDownload(entry)}><ArrowDownToLine size={16} /></button>}
-        <button type="button" className="entry-download entry-download-more" aria-label={`更多操作 ${entry.name}`} onClick={event => { actionsTrigger.current = event.currentTarget; setActionsEntry(entry) }}><MoreHorizontal size={18} /></button>
+        {directory.path.length > 0 && <button type="button" className="entry-download" aria-label={`移动到上一级 ${entry.name}`} title="移动到上一级" disabled={writeBlocked} onClick={() => void handleMoveToParent(entry.entryId)}><CornerUpLeft size={15} /></button>}
+        <button type="button" className="entry-download" aria-label={`移动 ${entry.name}`} title="移动" disabled={writeBlocked} onClick={() => setMovingSelections([{ entry, parentIndexId: directory.indexId, parentPath: directory.path }])}><MoveRight size={15} /></button>
+        <button type="button" className="entry-download" aria-label={`重命名 ${entry.name}`} title="重命名" disabled={writeBlocked} onClick={() => void handleRename(entry.entryId)}><FilePenLine size={15} /></button>
+        <button type="button" className="entry-download" aria-label={`移到回收站 ${entry.name}`} title="移到回收站" disabled={writeBlocked} onClick={() => void handleDelete(entry.entryId)}><Trash2 size={15} /></button>
+        {entry.kind === 'file' && <button type="button" className="entry-download" aria-label={`下载 ${entry.name}`} title="下载" onClick={() => void handleDownload(entry)}><ArrowDownToLine size={16} /></button>}
+        <button type="button" className="entry-download entry-download-more" aria-label={`更多操作 ${entry.name}`} title="更多操作" onClick={event => { actionsTrigger.current = event.currentTarget; setActionsEntry(entry) }}><MoreHorizontal size={18} /></button>
       </span>
       {drop && <span className="move-drop-label" aria-live="polite">{drop.message}</span>}
     </div>
