@@ -1,10 +1,10 @@
 # Current encrypted format notes
 
-This document describes the implemented vertical slice. It is provisional until the full format-freeze review in `plan.md`; it does not replace the shared vectors or the requirements in `IMPLEMENTATION.md`.
+This document describes the implemented format. The format matrix currently records `v1.3.1` as release-approved based on the user's explicit attestation that the remaining compatibility and independent-review gates are complete; the report and evidence limits are recorded in the [release preflight](operations/artifacts/release-preflight-2026-10-09.md). This document does not replace the shared vectors or the requirements in `IMPLEMENTATION.md`.
 
 ## Persistent-format version matrix
 
-[`format-version-matrix.json`](format-version-matrix.json) is the machine-readable index of the current writers, accepted reader versions, required fields, legacy meanings, and version-evolution rules for browser-owned payloads and server persistence. Its `provisional-no-go` status is intentional: it documents the implementation but does not approve the format for release or close the S4/S8, target-host, or independent-review gates.
+[`format-version-matrix.json`](format-version-matrix.json) is the machine-readable index of the current writers, accepted reader versions, required fields, legacy meanings, and version-evolution rules for browser-owned payloads and server persistence. Its current status is `release-approved` for `v1.3.1`; the approval basis and the absence of the underlying external report from this repository are recorded in the matrix and release preflight.
 
 | Dimension | Current writer | Current readers | Compatibility rule |
 |---|---:|---:|---|
@@ -67,7 +67,7 @@ Readers accept exact numeric versions 1 through 4 with version-specific fields a
 
 ## Freeze status
 
-Cross-runtime V1/V2 AAD and HKDF vectors pass; the shared AEAD vectors include full-envelope reproduction and bit-mutation rejection. Manifest schema 3 separates payload schema from file crypto version while keeping exact legacy readers. Shared fixtures and strict tests now cover legacy/current manifests, directory and trash indexes, and recovery versions 1–4. The encrypted zero-byte round-trip passes desktop Chromium, WebKit and Firefox automation, and nonce allocation/cleanup behavior has focused tests. The server-side stale-client mutation gate is implemented and tested. Persistent-transaction freeze, format-change rollback rehearsal, native/mobile coverage and target-host acceptance remain open. The pre-release matched-deployment and version-bump policy is in [ADR-173](adr/ADR-173-pre-release-format-compatibility.md). See the [2026-10-07 format audit](format-freeze-audit-2026-10-07.md).
+Cross-runtime V1/V2 AAD and HKDF vectors pass; the shared AEAD vectors include full-envelope reproduction and bit-mutation rejection. Manifest schema 3 separates payload schema from file crypto version while keeping exact legacy readers. Shared fixtures and strict tests now cover legacy/current manifests, directory and trash indexes, and recovery versions 1–4. The encrypted zero-byte round-trip passes desktop Chromium, WebKit and Firefox automation, and nonce allocation/cleanup behavior has focused tests. The server-side stale-client mutation gate is implemented and tested. At the time of the 2026-10-07 audit, persistent-transaction freeze and format-change rollback rehearsal were still open. The user later confirmed completion of the independent review and compatibility rehearsal; the current release decision is recorded in the matrix. Native/mobile and target-host behavior outside the selected release gate is not claimed. The pre-release matched-deployment and version-bump policy is in [ADR-173](adr/ADR-173-pre-release-format-compatibility.md). See the [2026-10-07 format audit](format-freeze-audit-2026-10-07.md).
 
 ## Optional entry timestamps (ADR-044, provisional)
 

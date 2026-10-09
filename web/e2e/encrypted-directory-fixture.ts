@@ -6,11 +6,12 @@ import { createRequire } from 'node:module'
 import setupArgon2idWasm from 'argon2id/lib/setup.js'
 import type { APIRequestContext } from '@playwright/test'
 import { CLIENT_PROTOCOL_VERSION } from '../src/api/protocol'
-import { indexAAD } from '../src/crypto/aad'
+import { chunkAAD, indexAAD, manifestAAD } from '../src/crypto/aad'
+import { FILE_CHUNK_BYTES } from '../src/crypto/constants'
 import { decryptObject, encryptObject } from '../src/crypto/envelope'
 import { decodeBase64Strict, utf8Strict } from '../src/crypto/encoding'
 import { validateArgon2idParams } from '../src/crypto/kdf'
-import { deriveIndexId, deriveVaultKey, unwrapVaultKey } from '../src/crypto/keys'
+import { deriveDataKey, deriveFileKey, deriveIndexId, deriveVaultKey, unwrapVaultKey } from '../src/crypto/keys'
 import type { VaultConfigV1 } from '../src/crypto/keys'
 import type { Argon2idParams } from '../src/crypto/constants'
 
@@ -42,9 +43,11 @@ export class EncryptedDirectoryFixture {
   private readonly csrf: string
   readonly rootId: string
   private readonly key: CryptoKey
+  private readonly vaultKey: CryptoKey
+  private readonly dataKey: CryptoKey
   private readonly cookie: string
-  private constructor(api: APIRequestContext, baseURL: string, csrf: string, rootId: string, key: CryptoKey, cookie: string) {
-    this.api = api; this.baseURL = baseURL; this.csrf = csrf; this.rootId = rootId; this.key = key; this.cookie = cookie
+  private constructor(api: APIRequestContext, baseURL: string, csrf: string, rootId: string, key: CryptoKey, vaultKey: CryptoKey, dataKey: CryptoKey, cookie: string) {
+    this.api = api; this.baseURL = baseURL; this.csrf = csrf; this.rootId = rootId; this.key = key; this.vaultKey = vaultKey; this.dataKey = dataKey; this.cookie = cookie
   }
   static async open(api: APIRequestContext, baseURL: string, password: string, cookie: string, allowExisting = false): Promise<EncryptedDirectoryFixture> {
     if (!['127.0.0.1', 'localhost'].includes(new URL(baseURL).hostname) || !/^xdrive_session=[A-Za-z0-9_-]{16,128}$/u.test(cookie)) throw new Error('fixture requires an authenticated loopback server')
@@ -60,6 +63,7 @@ export class EncryptedDirectoryFixture {
     if (!sessionResponse.ok() || !session.authenticated || !csrfToken) throw new Error('fixture session unavailable')
     const kek = await fixtureKEK(password, configuration.slots[0]!.kdf)
     const vaultKey = await unwrapVaultKey(kek, configuration)
+    const dataKey = await deriveDataKey(vaultKey)
     const rootId = await deriveIndexId(vaultKey, 'root')
     const key = await deriveVaultKey(vaultKey, 'xdrive/v1/meta')
     const stateResponse = await get(`/api/v1/vault/state`)
@@ -78,16 +82,81 @@ export class EncryptedDirectoryFixture {
       if (root.version !== 1 || root.indexId !== rootId || !Array.isArray(root.entries) || (!allowExisting && root.entries.length !== 0)) throw new Error("fixture requires a valid root and, unless explicitly allowed, an empty root")
       initialEntries = root.entries
     } finally { plaintext.fill(0); encrypted.fill(0) }
-    const fixture = new EncryptedDirectoryFixture(api, baseURL, csrfToken, rootId, key, cookie)
+    const fixture = new EncryptedDirectoryFixture(api, baseURL, csrfToken, rootId, key, vaultKey, dataKey, cookie)
     fixture.entries = initialEntries
     fixture.globalRevision = state.vaultMutationRevision
     fixture.revision = pointer.revision
     return fixture
   }
+  async addLegacyManifestFile(name: string, plaintext: Uint8Array, manifestVersion: 1 | 2): Promise<void> {
+    const fileId = opaqueId()
+    const fileKey = await deriveFileKey(this.vaultKey, this.dataKey, fileId, manifestVersion)
+    const chunks: { objectId: string; plaintextSize: number; sha256: string }[] = []
+    const objects: { objectId: string; encrypted: Uint8Array }[] = []
+    for (let offset = 0, index = 0; offset < plaintext.byteLength; offset += FILE_CHUNK_BYTES, index += 1) {
+      // Buffer.slice() aliases its input; copy explicitly so wiping the
+      // per-chunk plaintext does not also wipe a caller-owned test sample.
+      const part = Uint8Array.from(plaintext.subarray(offset, Math.min(plaintext.byteLength, offset + FILE_CHUNK_BYTES)))
+      const objectId = opaqueId()
+      const aad = chunkAAD({ fileId, chunkIndex: index, chunkCount: Math.ceil(plaintext.byteLength / FILE_CHUNK_BYTES), plaintextSize: part.byteLength }, manifestVersion)
+      let encrypted: Uint8Array | undefined
+      try {
+        encrypted = await encryptObject(fileKey, part, aad)
+        chunks.push({ objectId, plaintextSize: part.byteLength, sha256: createHash('sha256').update(encrypted).digest('hex') })
+        objects.push({ objectId, encrypted })
+        encrypted = undefined
+      } finally {
+        part.fill(0)
+        aad.fill(0)
+        encrypted?.fill(0)
+      }
+    }
+
+    const manifestObjectId = opaqueId()
+    const mime = 'text/plain'
+    const manifest = utf8Strict(JSON.stringify({ version: manifestVersion, fileId, size: plaintext.byteLength, mime, chunks }))
+    const manifestAADBytes = manifestAAD(fileId, manifestVersion)
+    let encryptedManifest: Uint8Array
+    try { encryptedManifest = await encryptObject(fileKey, manifest, manifestAADBytes) }
+    finally { manifest.fill(0); manifestAADBytes.fill(0) }
+    objects.push({ objectId: manifestObjectId, encrypted: encryptedManifest })
+
+    const entry = {
+      entryId: opaqueId(), kind: 'file', name, size: plaintext.byteLength, mime, fileId,
+      ...(manifestVersion === 2 ? { fileCryptoVersion: 2 as const } : {}),
+      manifestObjectId, manifestSha256: createHash('sha256').update(encryptedManifest).digest('hex'),
+    }
+    const nextEntries = [...this.entries, entry]
+    const encryptedIndex = await encryptObject(this.key, utf8Strict(JSON.stringify({ version: 1, indexId: this.rootId, entries: nextEntries })), indexAAD(this.rootId, this.revision + 1))
+    objects.push({ objectId: opaqueId(), encrypted: encryptedIndex })
+
+    const { uploadId } = await this.post<{ uploadId: string }>('/uploads', {})
+    await this.post(`/uploads/${uploadId}/reserve`, { reservedBytes: objects.reduce((sum, item) => sum + item.encrypted.byteLength, 0) })
+    try {
+      for (const item of objects) await this.putEncryptedObject(uploadId, item)
+      const rootObject = objects[objects.length - 1]!
+      await this.post('/metadata/transactions', {
+        uploadId, expectedGlobalRevision: this.globalRevision, activateObjectIds: objects.map((item) => item.objectId),
+        updates: [{ metadataId: this.rootId, objectId: rootObject.objectId, expectedRevision: this.revision }],
+      }, opaqueId())
+      this.entries = nextEntries
+      this.globalRevision += 1
+      this.revision += 1
+    } finally {
+      for (const item of objects) item.encrypted.fill(0)
+    }
+  }
   private async post<T>(path: string, data: unknown, idempotencyKey?: string): Promise<T> {
     const response = await this.api.post(`${this.baseURL}/api/v1${path}`, { data, headers: { Cookie: this.cookie, Origin: this.baseURL, 'X-CSRF-Token': this.csrf, 'X-XDrive-Client-Protocol': CLIENT_PROTOCOL_VERSION, ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) } })
     if (!response.ok()) throw new Error(`fixture request failed: ${path} ${response.status()} ${(await response.text()).slice(0, 200)}`)
     return await response.json() as T
+  }
+  private async putEncryptedObject(uploadId: string, item: { objectId: string; encrypted: Uint8Array }): Promise<void> {
+    const response = await this.api.put(`${this.baseURL}/api/v1/uploads/${uploadId}/objects/${item.objectId}`, {
+      data: Buffer.from(item.encrypted), headers: { Cookie: this.cookie, Origin: this.baseURL, 'X-CSRF-Token': this.csrf, 'X-XDrive-Client-Protocol': CLIENT_PROTOCOL_VERSION, 'X-XDrive-Object-Size': String(item.encrypted.byteLength), 'X-XDrive-Ciphertext-SHA256': createHash('sha256').update(item.encrypted).digest('hex') },
+    })
+    if (response.status() !== 201) throw new Error(`fixture object PUT failed: ${response.status()}`)
+    item.encrypted.fill(0)
   }
   async growTo(count: number): Promise<{ count: number; rootEncryptedBytes: number; globalRevision: number }> {
     if (!Number.isInteger(count) || count < this.entries.length || count > 5000) throw new TypeError('invalid fixture directory count')
@@ -105,13 +174,7 @@ export class EncryptedDirectoryFixture {
       prepared.push({ objectId: opaqueId(), metadataId: this.rootId, expectedRevision: this.revision, encrypted })
       const { uploadId } = await this.post<{ uploadId: string }>('/uploads', {})
       await this.post(`/uploads/${uploadId}/reserve`, { reservedBytes: prepared.reduce((sum, item) => sum + item.encrypted.byteLength, 0) })
-      for (const item of prepared) {
-        const response = await this.api.put(`${this.baseURL}/api/v1/uploads/${uploadId}/objects/${item.objectId}`, {
-          data: Buffer.from(item.encrypted), headers: { Cookie: this.cookie, Origin: this.baseURL, 'X-CSRF-Token': this.csrf, 'X-XDrive-Client-Protocol': CLIENT_PROTOCOL_VERSION, 'X-XDrive-Object-Size': String(item.encrypted.byteLength), 'X-XDrive-Ciphertext-SHA256': createHash('sha256').update(item.encrypted).digest('hex') },
-        })
-        if (response.status() !== 201) throw new Error(`fixture object PUT failed: ${response.status()}`)
-        item.encrypted.fill(0)
-      }
+      for (const item of prepared) await this.putEncryptedObject(uploadId, item)
       const committed = await this.post<{ vaultMutationRevision: number }>('/metadata/transactions', {
         uploadId, expectedGlobalRevision: this.globalRevision, activateObjectIds: prepared.map((item) => item.objectId),
         updates: prepared.map((item) => ({ metadataId: item.metadataId, objectId: item.objectId, expectedRevision: item.expectedRevision })),

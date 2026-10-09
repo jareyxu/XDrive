@@ -1,6 +1,15 @@
 {
   "matrixVersion": 1,
-  "status": "provisional-no-go",
+  "status": "release-approved",
+  "releaseApproval": {
+    "version": "v1.3.1",
+    "reviewedAt": "2026-10-09",
+    "reviewer": "User attestation in the current project conversation; personal identity not provided",
+    "evidence": [
+      "The user explicitly confirmed that the previously open RC.4-to-current-candidate Linux artifact rehearsal and the independent security review plus second format review are complete.",
+      "See docs/operations/artifacts/release-preflight-2026-10-09.md for the recorded attestation and its evidence limits. The underlying independent review report, reviewer identity, and exact rehearsal artifact hashes were not provided in the repository."
+    ]
+  },
   "scope": "XDrive V1.3.1 persistent and client mutation formats",
   "contracts": {
     "encryptedObjectEnvelope": {

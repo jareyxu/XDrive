@@ -1,14 +1,14 @@
 import { selectListPreference } from './legacy-list-test'
 import { expect, test, type BrowserContext } from './legacy-list-test'
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { basename, join } from 'node:path'
+import { accessSync, constants as fsConstants, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { execFileSync, spawn } from 'node:child_process'
 import { once } from 'node:events'
 import { createServer } from 'node:net'
 import { createHash } from 'node:crypto'
 import { Uint8ArrayReader, ZipReader } from '@zip.js/zip.js'
-import { fixtureKEK } from './encrypted-directory-fixture'
+import { EncryptedDirectoryFixture, fixtureKEK } from './encrypted-directory-fixture'
 import { createMinimalPDF } from './media-fixtures'
 import { indexAAD } from '../src/crypto/aad'
 import { decryptObject } from '../src/crypto/envelope'
@@ -580,17 +580,20 @@ test('changing the password keeps encrypted files readable and revokes other ses
   } finally { await otherContext.close() }
 })
 
-test('CLI backup and restore preserve mixed V1/V2 encrypted files after password change and reject the old session', async ({ browser }) => {
+test('CLI backup and restore preserve legacy manifest schemas and mixed V1/V2 encrypted files', async ({ browser }) => {
   test.setTimeout(180_000)
   const backupDir = mkdtempSync(join(tmpdir(), 'xdrive-backup-e2e-'))
   const projectRoot = join(import.meta.dirname, '..', '..')
   const restoredRoot = join(backupDir, 'restored-data')
-  const binary = join(backupDir, 'xdrive-test-binary')
+  const cliBinaryOverride = process.env.XDRIVE_E2E_CLI_BINARY
+  const binary = cliBinaryOverride ? resolve(cliBinaryOverride) : join(backupDir, 'xdrive-test-binary')
   const initialPassword = 'correct horse battery'
   const legacyPassword = 'legacy v1 backup battery'
   const changedPassword = 'new correct horse battery'
   const legacyBytes = Buffer.from('legacy file encrypted with V1 file keys')
   const currentBytes = Buffer.from('current file encrypted with V2 file keys')
+  const manifestV1Bytes = Buffer.from('historical manifest payload schema one')
+  const manifestV2Bytes = Buffer.from('historical manifest payload schema two')
   let server: Awaited<ReturnType<typeof startIsolatedServer>> | undefined
   let setupContext: BrowserContext | undefined
   let previousContext: BrowserContext | undefined
@@ -655,6 +658,17 @@ test('CLI backup and restore preserve mixed V1/V2 encrypted files after password
       name: 'current-backup-note.txt', mimeType: 'text/plain', buffer: currentBytes,
     })
     await expect(setupPage.getByRole('button', { name: 'current-backup-note.txt', exact: true })).toBeVisible({ timeout: 30_000 })
+    const fixtureSession = (await setupContext.cookies()).find((entry) => entry.name === 'xdrive_session')
+    if (!fixtureSession) throw new Error('authenticated session cookie missing before legacy manifest fixture')
+    const encryptedFixture = await EncryptedDirectoryFixture.open(
+      setupContext.request,
+      server.baseURL,
+      changedPassword,
+      `${fixtureSession.name}=${fixtureSession.value}`,
+      true,
+    )
+    await encryptedFixture.addLegacyManifestFile('manifest-schema-1.txt', manifestV1Bytes, 1)
+    await encryptedFixture.addLegacyManifestFile('manifest-schema-2.txt', manifestV2Bytes, 2)
     await setupContext.close()
     setupContext = undefined
 
@@ -670,7 +684,16 @@ test('CLI backup and restore preserve mixed V1/V2 encrypted files after password
     const previousCookie = (await previousContext.cookies()).find((entry) => entry.name === 'xdrive_session')
     if (!previousCookie) throw new Error('live session cookie missing')
 
-    execFileSync('go', ['build', '-o', binary, './cmd/xdrive'], { cwd: projectRoot, env: baseEnvironment })
+    if (cliBinaryOverride) {
+      accessSync(binary, fsConstants.X_OK)
+      const expectedVersion = process.env.XDRIVE_E2E_CLI_VERSION
+      if (expectedVersion) {
+        const actualVersion = execFileSync(binary, ['version'], { cwd: projectRoot, env: baseEnvironment, encoding: 'utf8' }).trim()
+        if (!actualVersion.includes(expectedVersion)) throw new Error(`E2E CLI binary version mismatch: expected ${expectedVersion}, received ${actualVersion}`)
+      }
+    } else {
+      execFileSync('go', ['build', '-o', binary, './cmd/xdrive'], { cwd: projectRoot, env: baseEnvironment })
+    }
     execFileSync(binary, ['backup', '--verify', backupDir], { cwd: projectRoot, env: baseEnvironment })
     execFileSync(binary, ['verify-backup', backupDir], { cwd: projectRoot, env: baseEnvironment })
     const port = await availablePort()
@@ -699,17 +722,50 @@ test('CLI backup and restore preserve mixed V1/V2 encrypted files after password
     await selectListPreference(context)
     try {
       const page = await context.newPage()
+      await page.addInitScript(() => {
+        const target = window as Window & { xdriveSavedBytes?: { name: string; chunks: number[][] } }
+        Object.defineProperty(window, 'showSaveFilePicker', {
+          configurable: true,
+          value: async ({ suggestedName }: { suggestedName: string }) => ({
+            createWritable: async () => new WritableStream<Uint8Array>({
+              write(chunk) {
+                if (target.xdriveSavedBytes?.name !== suggestedName) target.xdriveSavedBytes = { name: suggestedName, chunks: [] }
+                target.xdriveSavedBytes.chunks.push(Array.from(chunk))
+              },
+            }),
+          }),
+        })
+      })
       await page.goto('/drive')
       await page.getByLabel('管理员用户名').fill('admin')
       await page.getByLabel('密码').fill(changedPassword)
       await page.getByRole('button', { name: '解锁云盘' }).click()
       await expect(page.getByRole('button', { name: 'legacy-backup-note.txt', exact: true })).toBeVisible({ timeout: 30_000 })
       await expect(page.getByRole('button', { name: 'current-backup-note.txt', exact: true })).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByRole('button', { name: 'manifest-schema-1.txt', exact: true })).toBeVisible({ timeout: 30_000 })
+      await expect(page.getByRole('button', { name: 'manifest-schema-2.txt', exact: true })).toBeVisible({ timeout: 30_000 })
       await page.getByRole('button', { name: 'legacy-backup-note.txt', exact: true }).click()
       await expect(page.getByRole('dialog', { name: '预览 legacy-backup-note.txt' })).toContainText(legacyBytes.toString())
       await page.getByRole('button', { name: '关闭预览' }).click()
       await page.getByRole('button', { name: 'current-backup-note.txt', exact: true }).click()
       await expect(page.getByRole('dialog', { name: '预览 current-backup-note.txt' })).toContainText(currentBytes.toString())
+      await page.getByRole('button', { name: '关闭预览' }).click()
+      await page.getByRole('button', { name: 'manifest-schema-1.txt', exact: true }).click()
+      await expect(page.getByRole('dialog', { name: '预览 manifest-schema-1.txt' })).toContainText(manifestV1Bytes.toString())
+      await page.getByRole('button', { name: '关闭预览' }).click()
+      await page.getByRole('button', { name: '下载 manifest-schema-1.txt' }).click()
+      await expect(page.getByRole('status')).toContainText('文件已保存。')
+      const schemaOneSaved = await page.evaluate(() => (window as Window & { xdriveSavedBytes?: { name: string; chunks: number[][] } }).xdriveSavedBytes)
+      expect(schemaOneSaved?.name).toBe('manifest-schema-1.txt')
+      expect(Buffer.from(schemaOneSaved?.chunks.flat() ?? [])).toEqual(manifestV1Bytes)
+      await page.getByRole('button', { name: 'manifest-schema-2.txt', exact: true }).click()
+      await expect(page.getByRole('dialog', { name: '预览 manifest-schema-2.txt' })).toContainText(manifestV2Bytes.toString())
+      await page.getByRole('button', { name: '关闭预览' }).click()
+      await page.getByRole('button', { name: '下载 manifest-schema-2.txt' }).click()
+      await expect(page.getByRole('status')).toContainText('文件已保存。')
+      const schemaTwoSaved = await page.evaluate(() => (window as Window & { xdriveSavedBytes?: { name: string; chunks: number[][] } }).xdriveSavedBytes)
+      expect(schemaTwoSaved?.name).toBe('manifest-schema-2.txt')
+      expect(Buffer.from(schemaTwoSaved?.chunks.flat() ?? [])).toEqual(manifestV2Bytes)
     } finally { await context.close() }
   } finally {
     await setupContext?.close()

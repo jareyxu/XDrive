@@ -133,7 +133,12 @@ class PersistentFormatContractTests(unittest.TestCase):
                 write = contract.get("writeVersion", contract.get("currentWriteVersion", contract.get("writeFormatVersion")))
                 if write is not None:
                     self.assertIn(write, versions, name)
-        self.assertEqual(self.matrix["status"], "provisional-no-go")
+        self.assertEqual(self.matrix["status"], "release-approved")
+        approval = self.matrix["releaseApproval"]
+        self.assertEqual(approval["version"], "v1.3.1")
+        self.assertRegex(approval["reviewedAt"], r"^\d{4}-\d{2}-\d{2}$")
+        self.assertTrue(approval["reviewer"].strip())
+        self.assertTrue(approval["evidence"])
         aad = self.contracts["aadDomains"]
         self.assertEqual(aad["keySlotFormatVersions"], self.contracts["vaultConfigAndKeySlotAad"]["readVersions"])
         self.assertEqual(aad["chunkManifestThumbnailCryptoVersions"], self.contracts["fileCrypto"]["readVersions"])
