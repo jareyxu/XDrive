@@ -33,6 +33,7 @@ scripts-check:
 	python3 tests/client_protocol_contract_test.py
 	python3 tests/error_catalog_contract_test.py
 	python3 tests/persistent_format_contract_test.py
+	python3 tests/release_package_test.py
 	@set -u; \
 	test_logs=$$(mktemp -d); \
 	trap 'rm -rf "$$test_logs"' EXIT; \

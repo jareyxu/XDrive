@@ -19,10 +19,18 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class UpgradeTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.build = tempfile.TemporaryDirectory(prefix="xdrive-upgrade-cli-")
+        cls.addClassCleanup(cls.build.cleanup)
+        cls.package_reader = Path(cls.build.name) / "xdrive"
+        subprocess.run(["go", "build", "-o", str(cls.package_reader), "./cmd/xdrive"], cwd=ROOT, check=True)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="xdrive-upgrade-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
+        (self.root / "tmp").mkdir()
         source = (Path(__file__).resolve().parents[1] / "scripts/upgrade.sh").read_text()
         for prefix in ["/usr/local", "/etc", "/run", "/var/backups"]:
             source = source.replace(prefix, str(self.root) + prefix)
@@ -56,6 +64,7 @@ class UpgradeTests(unittest.TestCase):
 set -eu
 printf "binary %s\\n" "$*" >> "$TEST_LOG"
 case "$1" in
+  release-package) exec "$TEST_PACKAGE_READER" "$@" ;;
   version) printf "xdrive v1.3.1 (fixture)\\n" ;;
   snapshot-db) [[ -f "$TEST_HOLD" ]] || exit 77; cp "$TEST_DB" "${@: -1}" ;;
   migrate) printf "new-schema\\n" > "$TEST_DB"; [[ ${TEST_FAIL_MIGRATE:-0} == 0 ]] ;;
@@ -86,9 +95,11 @@ esac
             "uname": 'printf "x86_64\\n"',
             "dpkg": 'if [[ $1 == --print-architecture ]]; then printf "amd64\\n"; fi',
             "flock": "exit 0",
+            "mv": '''/bin/mv "$@"
+if [[ ${TEST_KILL_TREE_SWITCH:-0} == 1 && $1 == "$TEST_APP_ROOT" && $2 == */.xdrive-previous-* ]]; then kill -KILL "$PPID"; fi''',
             "stat": 'if [[ $2 == %u ]]; then printf "%s\\n" "${TEST_LOCK_OWNER:-0}"; elif [[ $2 == %u:%G:%a ]]; then printf "%s:%s:%s\\n" "${TEST_CONFIG_DIR_OWNER:-0}" "${TEST_CONFIG_DIR_GROUP:-xdrive}" "${TEST_CONFIG_DIR_MODE:-750}"; else exit 99; fi',
             "sleep": "exit 0",
-            "chown": '[[ ${TEST_FAIL_ROLLBACK:-0} == 0 ]]',
+            "chown": '[[ ${@: -1} != *.rollback-* || ${TEST_FAIL_ROLLBACK:-0} == 0 ]]',
             "runuser": 'shift 3; exec "$@"',
             "install": '''args=()
 directory=0
@@ -137,8 +148,99 @@ else grep -q old-schema "$TEST_DB"; fi''',
             path = self.commands / name
             path.write_text("#!/usr/bin/env bash\nset -eu\n" + body + "\n")
             path.chmod(0o755)
-        self.environment = dict(os.environ, PATH=str(self.commands) + ":" + os.environ["PATH"], TEST_LOG=str(self.root / "commands.log"),
-                                TEST_DB=str(self.database), TEST_HOLD=str(self.rollback_hold), TEST_STATE=str(self.state), TEST_BINARY=str(self.binary), TEST_SITE=str(self.site))
+        self.environment = dict(os.environ, TMPDIR=str(self.root / "tmp"), PATH=str(self.commands) + ":" + os.environ["PATH"], TEST_LOG=str(self.root / "commands.log"),
+                                TEST_APP_ROOT=str(self.binary.parent), TEST_PACKAGE_READER=str(self.package_reader), TEST_DB=str(self.database), TEST_HOLD=str(self.rollback_hold), TEST_STATE=str(self.state), TEST_BINARY=str(self.binary), TEST_SITE=str(self.site))
+
+    def build_manifest_bundle(self, extra=20):
+        for index in range(extra):
+            path = self.release / "assets/icons" / f"file-{index}.dat"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"resource-{index}".encode())
+        subprocess.run(["python3", str(ROOT / "scripts/build_release_archive.py"), "--stage", str(self.release),
+                        "--output", str(self.bundle)], check=True)
+        self.digest = hashlib.sha256(self.bundle.read_bytes()).hexdigest()
+
+    def install_previous_manifest(self):
+        stage = self.root / "previous-stage"
+        shutil.copytree(self.binary.parent, stage)
+        (stage / "install.sh").write_text("old installer\n")
+        (stage / "RELEASE.txt").write_text("version=v1.3.0\nos=linux\narchitecture=amd64\n")
+        (stage / "obsolete").mkdir()
+        (stage / "obsolete/old.dat").write_bytes(b"previous resource")
+        archive = self.root / "previous.tar.gz"
+        subprocess.run(["python3", str(ROOT / "scripts/build_release_archive.py"), "--stage", str(stage),
+                        "--output", str(archive)], check=True)
+        ready = self.root / "previous-prepared"
+        ready.mkdir()
+        subprocess.run([str(self.package_reader), "release-package", "prepare", "--archive", str(archive),
+                        "--root", str(ready), "--architecture", "amd64"], check=True)
+        shutil.rmtree(self.binary.parent)
+        ready.rename(self.binary.parent)
+
+    def test_twenty_new_files_are_installed_and_obsolete_managed_files_are_removed(self):
+        self.install_previous_manifest()
+        self.build_manifest_bundle()
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.binary.parent / "obsolete/old.dat").exists())
+        for index in range(20):
+            self.assertEqual((self.binary.parent / "assets/icons" / f"file-{index}.dat").read_bytes(), f"resource-{index}".encode())
+        subprocess.run([str(self.package_reader), "release-package", "check-installed", "--root", str(self.binary.parent)], check=True)
+        backups = list((self.root / "var/backups/xdrive").glob("upgrade-*/application.old/obsolete/old.dat"))
+        self.assertEqual(len(backups), 1)
+        self.assertEqual(backups[0].read_bytes(), b"previous resource")
+
+    def test_failed_readiness_restores_old_resources_and_removes_all_new_files(self):
+        self.install_previous_manifest()
+        receipt = (self.binary.parent / "RELEASE.txt").read_bytes()
+        self.build_manifest_bundle()
+        result = self.run_script(TEST_FAIL_READY="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assert_rolled_back()
+        self.assertEqual((self.binary.parent / "RELEASE.txt").read_bytes(), receipt)
+        self.assertEqual((self.binary.parent / "obsolete/old.dat").read_bytes(), b"previous resource")
+        self.assertFalse((self.binary.parent / "assets").exists())
+        subprocess.run([str(self.package_reader), "release-package", "check-installed", "--root", str(self.binary.parent)], check=True)
+
+    def test_interruption_between_directory_renames_retains_complete_recovery_material(self):
+        self.install_previous_manifest()
+        self.build_manifest_bundle()
+        result = self.run_script(TEST_KILL_TREE_SWITCH="1")
+        self.assertEqual(result.returncode, -signal.SIGKILL, result.stdout + result.stderr)
+        self.assertTrue(self.rollback_hold.is_file())
+        self.assertEqual(self.state.read_text(), "stopped\n")
+        self.assertIn("being upgraded", self.site.read_text())
+        self.assertFalse(self.binary.parent.exists())
+        previous = list(self.binary.parent.parent.glob(".xdrive-previous-*"))
+        self.assertEqual(len(previous), 1)
+        self.assertEqual((previous[0] / "obsolete/old.dat").read_bytes(), b"previous resource")
+        backups = list((self.root / "var/backups/xdrive").glob("upgrade-*/application.old"))
+        self.assertEqual(len(backups), 1)
+        # Exercise recovery of the exact saved application/database pair.
+        shutil.copytree(backups[0], self.binary.parent)
+        shutil.copyfile(backups[0].parent / "db.sqlite.snapshot", self.database)
+        subprocess.run([str(self.package_reader), "release-package", "check-installed", "--root", str(self.binary.parent)], check=True)
+        self.assertEqual(self.database.read_text(), "old-schema\n")
+        self.assertEqual(self.binary.read_bytes(), self.old_binary)
+        self.state.write_text("old\n")
+        self.site.write_bytes(self.site_before)
+        subprocess.run([str(self.commands / "curl")], env=self.environment, check=True)
+        self.rollback_hold.unlink()
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.binary.parent / "obsolete").exists())
+        self.assertEqual((self.binary.parent / "assets/icons/file-19.dat").read_bytes(), b"resource-19")
+
+    def test_untracked_administrator_file_is_preserved_and_upgrade_stops_before_maintenance(self):
+        local = self.binary.parent / "admin-note.txt"
+        local.write_text("preserve local administration file\n")
+        self.build_manifest_bundle()
+        result = self.run_script()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("untracked", result.stderr)
+        self.assertEqual(local.read_text(), "preserve local administration file\n")
+        self.assert_rolled_back()
+        self.assertNotIn("systemctl stop", (self.root / "commands.log").read_text())
 
     def run_script(self, digest=None, **environment):
         return subprocess.run(["bash", str(self.script), "--bundle", str(self.bundle), "--sha256", digest or self.digest.upper()],

@@ -24,7 +24,7 @@ func TestRunWorkerChecksReleaseAndRecordsSuccess(t *testing.T) {
 		case LatestReleaseAPI:
 			return response(http.StatusOK, `{"tag_name":"v1.4.0","html_url":"https://github.com/jareyxu/XDrive/releases/tag/v1.4.0"}`), nil
 		case ReleaseBaseURL + "v1.4.0/SHA256SUMS":
-			return response(http.StatusOK, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  xdrive-v1.4.0-linux-amd64.tar.gz\n"), nil
+			return response(http.StatusOK, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  xdrive-v1.4.0-linux-amd64-package.tar.gz\n"), nil
 		default:
 			t.Fatalf("unexpected request: %s", request.URL)
 			return nil, nil
@@ -36,7 +36,7 @@ func TestRunWorkerChecksReleaseAndRecordsSuccess(t *testing.T) {
 		Current: "v1.3.1", Architecture: "amd64", HTTPClient: client,
 		RunUpgrade: func(_ context.Context, path, archiveURL, digest string) error {
 			called = true
-			if path != "/tmp/upgrade.sh" || archiveURL != ReleaseBaseURL+"v1.4.0/xdrive-v1.4.0-linux-amd64.tar.gz" || digest != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
+			if path != "/tmp/upgrade.sh" || archiveURL != ReleaseBaseURL+"v1.4.0/xdrive-v1.4.0-linux-amd64-package.tar.gz" || digest != "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" {
 				t.Fatalf("unexpected upgrade args: %q %q %q", path, archiveURL, digest)
 			}
 			return nil

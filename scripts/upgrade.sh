@@ -2,21 +2,23 @@
 set -euo pipefail
 
 usage() {
-  printf 'Usage: %s (--bundle FILE | --release-url HTTPS_URL) --sha256 TRUSTED_HEX\n' "$0" >&2
+  printf 'Usage: %s (--bundle FILE | --release-url HTTPS_URL) --sha256 TRUSTED_HEX [--expected-version VERSION]\n' "$0" >&2
   exit 2
 }
 
 bundle=''
 release_url=''
 expected_digest=''
+expected_version=''
 while (($#)); do
   case "$1" in
-    --bundle|--release-url|--sha256)
+    --bundle|--release-url|--sha256|--expected-version)
       (($# >= 2)) || usage
       case "$1" in
         --bundle) bundle=$2 ;;
         --release-url) release_url=$2 ;;
         --sha256) expected_digest=$2 ;;
+        --expected-version) expected_version=$2 ;;
       esac
       shift 2 ;;
     *) usage ;;
@@ -37,7 +39,8 @@ case "$(uname -m)" in
 esac
 [[ $(dpkg --print-architecture) == "$architecture" ]] || { printf 'CPU and package architecture disagree.\n' >&2; exit 1; }
 
-binary=/usr/local/libexec/xdrive/xdrive
+application_dir=/usr/local/libexec/xdrive
+binary="$application_dir/xdrive"
 candidate="$binary.candidate"
 configuration=/etc/xdrive/config.toml
 proxy_mode_file=/etc/xdrive/proxy-mode
@@ -62,7 +65,7 @@ installed_uninstaller=/usr/local/libexec/xdrive/uninstall.sh
 }
 # Reject redirection before opening locks, entering maintenance or writing
 # candidates/backups. The installed command symlink is not used by this helper.
-for managed_path in "$binary" "$configuration" "$site" "$installed_updater" "$installed_uninstaller" "$proxy_mode_file" /etc/systemd/system/xdrive.service /var/backups/xdrive /run/xdrive-upgrade.lock; do
+for managed_path in "$application_dir" "${application_dir%/*}" "$binary" "$configuration" "$site" "$installed_updater" "$installed_uninstaller" "$proxy_mode_file" /etc/systemd/system/xdrive.service /var/backups/xdrive /run/xdrive-upgrade.lock; do
   [[ ! -L $managed_path && $(realpath -m -- "$managed_path") == "$managed_path" ]] || {
     printf 'Managed upgrade paths must be canonical and must not be symlinked. No upgrade changes were made.\n' >&2
     exit 1
@@ -128,11 +131,17 @@ exec 9>>"$operation_lock"
 flock -n 9 || { printf 'Another upgrade is already running.\n' >&2; exit 1; }
 
 temporary_dir=$(mktemp -d)
+temporary_dir=$(cd "$temporary_dir" && pwd -P)
 site_changed=false
 service_stopped=false
 rollback_needed=false
 rollback_dir=''
 rollback_hold_created=false
+candidate_dir=''
+previous_dir=''
+failed_dir=''
+old_directory_moved=false
+release_accepted=false
 
 restore_site() {
   if [[ $site_changed == true ]]; then
@@ -169,21 +178,17 @@ restore_binary_and_database() {
   chown xdrive:xdrive "$rollback_temp" || return 1
   chmod 0600 "$rollback_temp" || return 1
   mv -f "$rollback_temp" "$database_path" || return 1
-  binary_temp=$(mktemp "${binary}.rollback-XXXXXXXX") || return 1
-  cp -p "$rollback_dir/xdrive.old" "$binary_temp" || return 1
-  chmod 0755 "$binary_temp" || return 1
-  mv -f "$binary_temp" "$binary" || return 1
-  # Restore helper scripts as well if acceptance failed after replacing them.
-  for helper in upgrade.sh uninstall.sh; do
-    helper_path="/usr/local/libexec/xdrive/$helper"
-    if [[ -f $rollback_dir/$helper.old ]]; then
-      helper_temp=$(mktemp "${helper_path}.rollback-XXXXXXXX") || return 1
-      cp -p "$rollback_dir/$helper.old" "$helper_temp" || return 1
-      mv -f "$helper_temp" "$helper_path" || return 1
-    elif [[ $helper == uninstall.sh ]]; then
-      rm -f "$helper_path" || return 1
+  if [[ $old_directory_moved == true ]]; then
+    # Restore the complete application tree, including resources and helpers.
+    if [[ -d $application_dir ]]; then
+      failed_dir=$(mktemp -d "${application_dir%/*}/.xdrive-failed-XXXXXXXX") || return 1
+      rmdir "$failed_dir" || return 1
+      mv "$application_dir" "$failed_dir" || return 1
     fi
-  done
+    mv "$previous_dir" "$application_dir" || return 1
+    old_directory_moved=false
+    "$temporary_dir/package-reader" release-package sync-directory --root "${application_dir%/*}" || return 1
+  fi
   systemctl start xdrive || return 1
   service_stopped=false
   wait_ready
@@ -233,10 +238,13 @@ on_exit() {
     fi
   fi
   if [[ -n ${rollback_temp:-} ]]; then rm -f "$rollback_temp"; fi
-  if [[ -n ${binary_temp:-} ]]; then rm -f "$binary_temp"; fi
   rm -f "$candidate"
   rm -f "$installed_updater.candidate"
   rm -f "$installed_uninstaller.candidate"
+  if [[ -n $candidate_dir && -d $candidate_dir ]]; then rm -rf "$candidate_dir"; fi
+  # Keep the previous directory if recovery failed; the rollback hold stays too.
+  if [[ -n $previous_dir && -d $previous_dir && ( $release_accepted == true || $rollback_recovered == true ) ]]; then rm -rf "$previous_dir"; fi
+  if [[ -n $failed_dir && -d $failed_dir && $rollback_recovered == true ]]; then rm -rf "$failed_dir"; fi
   rm -rf "$temporary_dir"
   exit "$result"
 }
@@ -250,26 +258,43 @@ else
 fi
 actual_digest=$(sha256sum "$archive" | awk '{ print $1 }')
 [[ $actual_digest == "$expected_digest" ]] || { printf 'Release SHA-256 mismatch.\n' >&2; exit 1; }
-# Reject links, directories and special files before root extracts anything.
+# The archive checksum is already trusted. Before extracting the bootstrap
+# executable, reject links/special files, duplicate names and unsafe paths.
 if ! LC_ALL=C tar -tvzf "$archive" | LC_ALL=C awk '
   BEGIN { valid = 1 }
   substr($0, 1, 1) != "-" { valid = 0 }
-  END { exit (!valid || NR != 5) }
+  END { exit (!valid || NR < 5 || NR > 4097) }
 '; then
-  printf 'Release archive has invalid file types.\n' >&2
+  printf 'Release archive has invalid file types or exceeds its bounds.\n' >&2
   exit 1
 fi
-archive_members=$(tar -tzf "$archive" | LC_ALL=C sort)
-[[ $archive_members == $'RELEASE.txt\ninstall.sh\nuninstall.sh\nupgrade.sh\nxdrive' ]] || { printf 'Release archive has unexpected paths.\n' >&2; exit 1; }
-tar -C "$temporary_dir" -xzf "$archive"
-[[ -f $temporary_dir/xdrive && ! -L $temporary_dir/xdrive && -f $temporary_dir/upgrade.sh && ! -L $temporary_dir/upgrade.sh && -f $temporary_dir/uninstall.sh && ! -L $temporary_dir/uninstall.sh && -f $temporary_dir/RELEASE.txt && ! -L $temporary_dir/RELEASE.txt ]] || {
-  printf 'Release archive has invalid file types.\n' >&2; exit 1;
-}
-grep -Fxq 'os=linux' "$temporary_dir/RELEASE.txt" || { printf 'Release is not for Linux.\n' >&2; exit 1; }
-grep -Fxq "architecture=$architecture" "$temporary_dir/RELEASE.txt" || { printf 'Release architecture mismatch.\n' >&2; exit 1; }
-release_version=$(sed -n 's/^version=//p' "$temporary_dir/RELEASE.txt")
+if ! LC_ALL=C tar -tzf "$archive" | LC_ALL=C awk '
+  {
+    if ($0 !~ /^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/ || length($0) > 240 || seen[$0]++) exit 1
+    count = split($0, parts, "/")
+    for (i=1; i<=count; i++) if (parts[i] == "." || parts[i] == "..") exit 1
+  }
+  END { if (!seen["xdrive"] || !seen["install.sh"] || !seen["upgrade.sh"] || !seen["uninstall.sh"] || !seen["RELEASE.txt"]) exit 1 }
+'; then
+  printf 'Release archive has unsafe, duplicate or missing paths.\n' >&2
+  exit 1
+fi
+# Extract only the authenticated bootstrap executable to a literal output file.
+# It validates the complete manifest before writing any package resource.
+tar -xOzf "$archive" xdrive > "$temporary_dir/package-reader"
+chmod 0755 "$temporary_dir/package-reader"
+mkdir "$temporary_dir/package"
+"$temporary_dir/package-reader" release-package prepare --archive "$archive" \
+  --root "$temporary_dir/package" --architecture "$architecture"
+package_dir="$temporary_dir/package"
+grep -Fxq 'os=linux' "$package_dir/RELEASE.txt" || { printf 'Release is not for Linux.\n' >&2; exit 1; }
+grep -Fxq "architecture=$architecture" "$package_dir/RELEASE.txt" || { printf 'Release architecture mismatch.\n' >&2; exit 1; }
+release_version=$(sed -n 's/^version=//p' "$package_dir/RELEASE.txt")
 [[ $release_version =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || { printf 'Release version is invalid.\n' >&2; exit 1; }
-binary_version=$("$temporary_dir/xdrive" version)
+[[ -z $expected_version || $release_version == "$expected_version" ]] || {
+  printf 'Release metadata does not match the approved update version.\n' >&2; exit 1;
+}
+binary_version=$("$package_dir/xdrive" version)
 [[ $binary_version == "xdrive $release_version ("* ]] || { printf 'Release metadata and binary version disagree.\n' >&2; exit 1; }
 old_version=$("$binary" version)
 old_release=${old_version#xdrive }
@@ -281,9 +306,23 @@ dpkg --compare-versions "${release_version#v}" gt "${old_release#v}" || {
   printf 'The selected release must be newer than the installed version.\n' >&2; exit 1;
 }
 
+"$temporary_dir/package-reader" release-package check-installed --root "$application_dir"
+[[ $(stat -c '%u' -- "$application_dir") == 0 && $(stat -c '%u' -- "${application_dir%/*}") == 0 ]] || {
+  printf 'The application directory and its parent must be root-owned.\n' >&2; exit 1;
+}
+# Stage on the same filesystem as the installed tree for directory publication.
+candidate_dir=$(mktemp -d "${application_dir%/*}/.xdrive-candidate-XXXXXXXX")
+cp -pR "$package_dir/." "$candidate_dir/"
+chmod 0755 "$candidate_dir"
+chown -R root:root "$candidate_dir"
+"$temporary_dir/package-reader" release-package sync-tree --root "$candidate_dir"
+previous_dir=$(mktemp -d "${application_dir%/*}/.xdrive-previous-XXXXXXXX")
+rmdir "$previous_dir"
 install -d -m 0750 -o root -g xdrive /var/backups/xdrive
 rollback_dir=$(mktemp -d /var/backups/xdrive/upgrade-XXXXXXXX)
 chmod 0700 "$rollback_dir"
+cp -pR "$application_dir" "$rollback_dir/application.old"
+"$temporary_dir/package-reader" release-package sync-tree --root "$rollback_dir/application.old"
 cp -p "$binary" "$rollback_dir/xdrive.old"
 cp -p "$installed_updater" "$rollback_dir/upgrade.sh.old"
 if [[ -f $installed_uninstaller && ! -L $installed_uninstaller ]]; then
@@ -310,26 +349,28 @@ systemctl stop xdrive
 service_stopped=true
 install -m 0640 -o root -g xdrive /dev/null "$rollback_hold"
 rollback_hold_created=true
-"$temporary_dir/xdrive" snapshot-db --config "$configuration" "$rollback_dir/db.sqlite.snapshot"
+"$candidate_dir/xdrive" snapshot-db --config "$configuration" "$rollback_dir/db.sqlite.snapshot"
 rollback_needed=true
-install -m 0755 -o root -g root "$temporary_dir/xdrive" "$candidate"
-runuser -u xdrive -- "$candidate" migrate --config "$configuration"
-runuser -u xdrive -- "$candidate" doctor --config "$configuration"
-mv -f "$candidate" "$binary"
+runuser -u xdrive -- "$candidate_dir/xdrive" migrate --config "$configuration"
+runuser -u xdrive -- "$candidate_dir/xdrive" doctor --config "$configuration"
+# The service is stopped and public writes remain blocked. Either the complete
+# new tree becomes active, or the old tree and database are restored together.
+mv "$application_dir" "$previous_dir"
+old_directory_moved=true
+mv "$candidate_dir" "$application_dir"
+candidate_dir=''
+"$temporary_dir/package-reader" release-package sync-directory --root "${application_dir%/*}"
 systemctl start xdrive
 service_stopped=false
 if ! wait_ready; then
   printf 'New service did not pass readiness.\n' >&2
   exit 1
 fi
-install -m 0755 -o root -g root "$temporary_dir/upgrade.sh" "$installed_updater.candidate"
-install -m 0755 -o root -g root "$temporary_dir/uninstall.sh" "$installed_uninstaller.candidate"
-mv -f "$installed_uninstaller.candidate" "$installed_uninstaller"
-mv -f "$installed_updater.candidate" "$installed_updater"
 # Public writes are still blocked by the managed proxy. Once readiness and updater
 # installation succeed, the candidate becomes accepted; a later proxy error
 # must not roll back a service that may soon perform normal background cleanup.
 rollback_needed=false
+release_accepted=true
 if ! clear_rollback_hold; then
   printf 'Could not clear the upgrade rollback hold. XDrive remains in maintenance for manual recovery.\n' >&2
   site_changed=false

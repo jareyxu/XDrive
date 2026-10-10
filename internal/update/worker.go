@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -105,15 +106,10 @@ func RunWorker(ctx context.Context, options WorkerOptions) error {
 	if err := writeStatus("downloading", ""); err != nil {
 		return errors.New("cannot record update status")
 	}
-	digest, err := Checksum(ctx, options.HTTPClient, latest.Version, architecture)
+	archiveURL, digest, err := SelectPackage(ctx, options.HTTPClient, latest.Version, architecture)
 	if err != nil {
 		_ = writeStatus("failed", "checksum_unavailable")
 		return errors.New("release checksum could not be verified")
-	}
-	archiveURL, _, err := ArchiveURL(latest.Version, architecture)
-	if err != nil {
-		_ = writeStatus("failed", "release_invalid")
-		return errors.New("release metadata is invalid")
 	}
 	if err := writeStatus("installing", ""); err != nil {
 		return errors.New("cannot record update status")
@@ -232,7 +228,11 @@ func runUpgradeCommand(ctx context.Context, upgradePath, archiveURL, digest stri
 	// context. The shell updater has an EXIT rollback trap; an abrupt process
 	// kill during its database/binary transaction could bypass that recovery.
 	_ = ctx
-	command := exec.Command(upgradePath, "--release-url", archiveURL, "--sha256", digest)
+	selectedVersion, _, ok := strings.Cut(strings.TrimPrefix(archiveURL, ReleaseBaseURL), "/")
+	if !strings.HasPrefix(archiveURL, ReleaseBaseURL) || !ok || !IsStableVersion(selectedVersion) {
+		return errors.New("invalid release archive URL")
+	}
+	command := exec.Command(upgradePath, "--release-url", archiveURL, "--sha256", digest, "--expected-version", selectedVersion)
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
 	if err := command.Run(); err != nil {

@@ -2,16 +2,17 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v1.3.6",
+    "version": "v1.3.7",
     "reviewedAt": "2026-10-10",
-    "reviewer": "User attestation in project conversation; personal identity not provided",
+    "reviewer": "Release deployment explicitly authorized by the user in the project conversation; automated implementation evidence recorded locally and required in Linux CI",
     "evidence": [
-      "The user confirmed completion of the previously open backup/restore compatibility rehearsal and independent security review plus second format review. This release preserves the approved crypto, metadata, SQLite, backup, and mutation contracts.",
-      "V1.3.6 repairs the v1.3.4-to-v1.3.5 web upgrade failure by preserving the legacy five-member release archive layout. Third-party notice and full LGPL-3.0 text are appended to RELEASE.txt; the archive layout remains compatible with deployed v1.3.4 upgrade scripts.",
-      "The release changes no encrypted payload, key derivation, AAD, metadata transaction, SQLite schema, backup container, or client mutation protocol. Release CI validates the source checks and packages both supported Linux architectures."
+      "The user requested deploying the extensible update fix. v1.3.7 is the first immutable legacy updater bridge; future releases retain its verified five-member compatibility envelope while current workers choose complete manifest-driven packages.",
+      "This change preserves the previously approved encrypted object, key derivation, AAD, metadata, SQLite, backup, and client mutation contracts. It adds release package format 1 and a controlled application-file installation boundary.",
+      "Go regression and race checks, portable installation/upgrade checks, variable-file package tests, twenty-resource deployment, removal of obsolete managed files, full directory/database rollback, administrator-file preservation, and interrupted directory-switch recovery passed locally. Both Linux architectures packaged successfully and all four candidate archive digests and manifests were verified.",
+      "Publication requires successful exact-commit main CI on Ubuntu, including project checks, all-package race tests and Linux cross-builds. An actual systemd two-stage legacy-to-future update rehearsal was not executed locally; that limitation remains recorded for target VPS rollout."
     ]
   },
-  "scope": "XDrive V1.3.6 HEIC/HEIF preview with backward-compatible Linux package layout; persistent formats and mutation protocol unchanged from V1.3.5",
+  "scope": "XDrive V1.3.7 extensible manifest-driven release packages, complete application-directory rollback, and immutable legacy updater bridge; persistent data contracts unchanged from V1.3.6",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,

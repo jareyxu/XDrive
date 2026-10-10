@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -104,16 +105,33 @@ func (h *Handler) systemUpdateStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_update_request")
 		return
 	}
+	if request, requestErr := update.ReadRequest(h.updateRequestPath); requestErr == nil && request.ID == id {
+		writeJSON(w, http.StatusOK, update.Status{ID: id, Version: request.Version, State: "queued", UpdatedAt: time.Now().Unix()})
+		return
+	}
 	status, err := update.ReadStatus(h.updateStatusPath)
 	if err == nil && status.ID == id {
 		writeJSON(w, http.StatusOK, status)
 		return
 	}
-	if request, requestErr := update.ReadRequest(h.updateRequestPath); requestErr == nil && request.ID == id {
-		writeJSON(w, http.StatusOK, update.Status{ID: id, Version: request.Version, State: "queued", UpdatedAt: time.Now().Unix()})
+	writeError(w, http.StatusNotFound, "update_status_not_found")
+}
+
+// ContinueLegacyUpdate completes the already approved target after a legacy
+// worker installs the bridge. It does not schedule unrelated future updates.
+func (h *Handler) ContinueLegacyUpdate(ctx context.Context, rollbackHold string) {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	request, err := update.AwaitBridgeContinuation(ctx, h.buildVersion, h.updateStatusPath, rollbackHold)
+	if err != nil || request == nil {
 		return
 	}
-	writeError(w, http.StatusNotFound, "update_status_not_found")
+	if !h.updateManagerActive(ctx) {
+		return
+	}
+	if err := queueSystemUpdate(h.updateRequestPath, *request); err != nil && !errors.Is(err, os.ErrExist) {
+		slog.Warn("legacy update continuation could not be queued", "code", "update_queue_unavailable")
+	}
 }
 
 func queueSystemUpdate(path string, request update.Request) error {

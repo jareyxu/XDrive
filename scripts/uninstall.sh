@@ -200,7 +200,12 @@ if [[ $delete_data == true ]]; then
   check_mounts
   rm -rf --one-file-system -- "$data_dir"
 fi
-rm -- "$unit" "$configuration" "$launcher" "$binary"
+if [[ -e /usr/local/libexec/xdrive/RELEASE.txt || -L /usr/local/libexec/xdrive/RELEASE.txt ]]; then
+  "$binary" release-package remove-installed --root /usr/local/libexec/xdrive
+else
+  rm -- "$binary"
+fi
+rm -- "$unit" "$configuration" "$launcher"
 if [[ -f $proxy_mode_file ]]; then rm -- "$proxy_mode_file"; fi
 if [[ $proxy_mode == nginx ]]; then rm -- "$tls_mode_file"; fi
 for helper in upgrade.sh uninstall.sh; do

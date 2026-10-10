@@ -173,52 +173,106 @@ func ArchiveURL(version, architecture string) (string, string, error) {
 	return ReleaseBaseURL + version + "/" + name, name, nil
 }
 
-// Checksum downloads SHA256SUMS from the exact official release and extracts
-// exactly one digest for the architecture-specific archive.
-func Checksum(ctx context.Context, client *http.Client, version, architecture string) (string, error) {
-	if client == nil {
-		client = HTTPClient()
+// PackageArchiveName identifies the complete manifest-driven distribution.
+// The original artifact name is reserved for legacy updater bootstrap packages.
+func PackageArchiveName(version, architecture string) (string, error) {
+	name, err := ArchiveName(version, architecture)
+	if err != nil {
+		return "", err
 	}
+	return strings.TrimSuffix(name, ".tar.gz") + "-package.tar.gz", nil
+}
+
+// SelectPackage prefers the complete distribution; releases predating the new
+// format have only the original artifact and remain readable.
+func SelectPackage(ctx context.Context, client *http.Client, version, architecture string) (string, string, error) {
+	legacy, err := ArchiveName(version, architecture)
+	if err != nil {
+		return "", "", err
+	}
+	full, err := PackageArchiveName(version, architecture)
+	if err != nil {
+		return "", "", err
+	}
+	digests, err := readChecksums(ctx, client, version, []string{full, legacy})
+	if err != nil {
+		return "", "", err
+	}
+	if comparison, err := CompareVersions(version, LegacyBridgeVersion); err == nil && comparison >= 0 && digests[full] == "" {
+		return "", "", errors.New("complete release package is missing; refusing to install a legacy bridge as the target version")
+	}
+	for _, name := range []string{full, legacy} {
+		if digest := digests[name]; digest != "" {
+			return ReleaseBaseURL + version + "/" + name, digest, nil
+		}
+	}
+	return "", "", errors.New("release checksum manifest does not contain a supported archive")
+}
+
+// Checksum retains the original artifact lookup for older callers.
+func Checksum(ctx context.Context, client *http.Client, version, architecture string) (string, error) {
 	archive, err := ArchiveName(version, architecture)
 	if err != nil {
 		return "", err
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, ReleaseBaseURL+version+"/SHA256SUMS", nil)
+	digests, err := readChecksums(ctx, client, version, []string{archive})
 	if err != nil {
 		return "", err
+	}
+	if digests[archive] == "" {
+		return "", errors.New("release checksum manifest does not contain the selected archive")
+	}
+	return digests[archive], nil
+}
+
+func readChecksums(ctx context.Context, client *http.Client, version string, names []string) (map[string]string, error) {
+	if client == nil {
+		client = HTTPClient()
+	}
+	if !IsStableVersion(version) {
+		return nil, errors.New("invalid release version")
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, ReleaseBaseURL+version+"/SHA256SUMS", nil)
+	if err != nil {
+		return nil, err
 	}
 	request.Header.Set("User-Agent", "XDrive-update-check")
 	response, err := client.Do(request)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("release checksums returned HTTP %d", response.StatusCode)
+		return nil, fmt.Errorf("release checksums returned HTTP %d", response.StatusCode)
 	}
-	scanner := bufio.NewScanner(io.LimitReader(response.Body, maxChecksumFile))
+	data, err := io.ReadAll(io.LimitReader(response.Body, maxChecksumFile+1))
+	if err != nil || len(data) > maxChecksumFile {
+		return nil, errors.New("release checksum manifest exceeds its limit")
+	}
+	wanted := make(map[string]bool)
+	for _, name := range names {
+		wanted[name] = true
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
 	scanner.Buffer(make([]byte, 1024), 4096)
-	var digest string
+	digests := make(map[string]string)
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
-		if len(fields) != 2 || fields[1] != archive {
+		if len(fields) == 0 || !wanted[fields[len(fields)-1]] {
 			continue
 		}
-		if digest != "" || len(fields[0]) != 64 {
-			return "", errors.New("release checksum manifest contains a duplicate or invalid archive digest")
+		if len(fields) != 2 || digests[fields[1]] != "" || len(fields[0]) != 64 {
+			return nil, errors.New("release checksum manifest contains a duplicate or invalid archive digest")
 		}
 		for _, char := range fields[0] {
 			if !((char >= '0' && char <= '9') || (char >= 'a' && char <= 'f') || (char >= 'A' && char <= 'F')) {
-				return "", errors.New("release checksum manifest contains an invalid digest")
+				return nil, errors.New("release checksum manifest contains an invalid digest")
 			}
 		}
-		digest = strings.ToLower(fields[0])
+		digests[fields[1]] = strings.ToLower(fields[0])
 	}
 	if err := scanner.Err(); err != nil {
-		return "", errors.New("release checksum manifest is too large or unreadable")
+		return nil, errors.New("release checksum manifest is too large or unreadable")
 	}
-	if digest == "" {
-		return "", errors.New("release checksum manifest does not contain the selected archive")
-	}
-	return digest, nil
+	return digests, nil
 }

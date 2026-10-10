@@ -30,6 +30,7 @@ class InstallCompletionTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="xdrive-install-completion-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name).resolve()
+        (self.root / "tmp").mkdir()
         self.commands = self.root / "commands"
         self.commands.mkdir()
         source = (ROOT / "scripts/install.sh").read_text()
@@ -46,6 +47,7 @@ class InstallCompletionTests(unittest.TestCase):
         (self.root / "etc/os-release").write_text('ID=debian\nVERSION_ID="12"\n')
         stage = self.root / "stage"
         stage.mkdir()
+        self.stage = stage
         shutil.copy2(self.binary, stage / "xdrive")
         for name in ["install.sh", "upgrade.sh", "uninstall.sh"]:
             shutil.copy2(ROOT / "scripts" / name, stage / name)
@@ -129,7 +131,7 @@ else:
 """)
         path.chmod(0o755)
         self.capture = self.root / "setup-output"
-        self.environment = dict(os.environ, PATH=str(self.commands) + ":" + os.environ["PATH"],
+        self.environment = dict(os.environ, TMPDIR=str(self.root / "tmp"), PATH=str(self.commands) + ":" + os.environ["PATH"],
                                 TEST_SETUP_CAPTURE=str(self.capture), TEST_BINARY=str(self.binary),
                                 TEST_RELOAD_LOG=str(self.root / "reload.log"), TEST_RELOAD_FAILED=str(self.root / "reload-failed"),
                                 TEST_CONFIG=str(self.root / "etc/xdrive/config.toml"), TEST_ROOT=str(self.root),
@@ -143,6 +145,22 @@ else:
                                "--domain", "drive.invalid", "--proxy", proxy, *tls_args,
                                "--username", "admin", "--data-dir", str(self.root / "var/lib/xdrive")], env=environment,
                               capture_output=True, text=True, timeout=30)
+
+    def test_manifest_installs_twenty_additional_resources(self):
+        for index in range(20):
+            path = self.stage / "assets/icons" / f"file-{index}.dat"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(f"resource-{index}".encode())
+        subprocess.run(["python3", str(ROOT / "scripts/build_release_archive.py"), "--stage", str(self.stage),
+                        "--output", str(self.bundle)], check=True)
+        result = self.run_script()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        installed = self.root / "usr/local/libexec/xdrive"
+        for index in range(20):
+            resource = installed / "assets/icons" / f"file-{index}.dat"
+            self.assertEqual(resource.read_bytes(), f"resource-{index}".encode())
+            self.assertEqual(resource.stat().st_mode & 0o777, 0o644)
+        subprocess.run([str(self.binary), "release-package", "check-installed", "--root", str(installed)], check=True)
 
     def test_actual_cli_token_becomes_exact_https_setup_link_without_explanation(self):
         result = self.run_script()

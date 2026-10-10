@@ -81,6 +81,9 @@ func runContext(args []string, operationContext context.Context) error {
 	if command == "update" {
 		return runInstalledScript("upgrade.sh", args)
 	}
+	if command == "release-package" {
+		return runReleasePackage(args)
+	}
 	if command == "enable-web-updates" {
 		if len(args) != 0 {
 			return errors.New("enable-web-updates does not accept arguments")
@@ -273,6 +276,12 @@ func runContext(args []string, operationContext context.Context) error {
 		stop()
 		<-cleanupDone
 	}()
+	bridgeDone := make(chan struct{})
+	go func() {
+		defer close(bridgeDone)
+		handler.ContinueLegacyUpdate(ctx, server.UpgradeRollbackHoldPath(*configPath, settings.DatabasePath))
+	}()
+	defer func() { stop(); <-bridgeDone }()
 
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- httpServer.ListenAndServe() }()

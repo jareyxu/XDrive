@@ -126,6 +126,9 @@ fi
   printf 'An XDrive installation already exists. Use the upgrade procedure; this installer will not overwrite it.\n' >&2
   exit 1
 }
+if [[ -d /usr/local/libexec/xdrive && -n $(find /usr/local/libexec/xdrive -mindepth 1 -maxdepth 1 -print -quit) ]]; then
+  printf 'The application directory contains unrelated files. No installation changes were made.\n' >&2; exit 1;
+fi
 if [[ $proxy_mode == caddy ]]; then
 [[ ! -e /etc/caddy/Caddyfile.d/xdrive.caddy && ! -L /etc/caddy/Caddyfile.d/xdrive.caddy ]] || {
   printf 'An XDrive Caddy site already exists; inspect it before installing.\n' >&2
@@ -199,6 +202,7 @@ if [[ $proxy_mode == caddy ]] && ! systemctl is-active --quiet caddy; then
 fi
 
 temporary_dir=$(mktemp -d)
+temporary_dir=$(cd "$temporary_dir" && pwd -P)
 nginx_site_created=false
 nginx_upstream_created=false
 renew_hook_created=false
@@ -231,27 +235,40 @@ fi
 actual_digest=$(sha256sum "$archive" | awk '{ print $1 }')
 expected_digest=$(printf '%s' "$expected_digest" | tr '[:upper:]' '[:lower:]')
 [[ $actual_digest == "$expected_digest" ]] || { printf 'Release SHA-256 mismatch. No installation changes were made.\n' >&2; exit 1; }
-# Inspect types before extracting as root. The name allowlist alone admits
-# links and special files; post-extraction checks are too late for confinement.
+# The archive checksum is already trusted. Before extracting the bootstrap
+# executable, reject links/special files, duplicate names and unsafe paths.
 if ! LC_ALL=C tar -tvzf "$archive" | LC_ALL=C awk '
   BEGIN { valid = 1 }
   substr($0, 1, 1) != "-" { valid = 0 }
-  END { exit (!valid || NR != 5) }
+  END { exit (!valid || NR < 5 || NR > 4097) }
 '; then
-  printf 'Release archive has invalid file types. No installation changes were made.\n' >&2
+  printf 'Release archive has invalid file types or exceeds its bounds.\n' >&2
   exit 1
 fi
-archive_members=$(tar -tzf "$archive" | LC_ALL=C sort)
-[[ $archive_members == $'RELEASE.txt\ninstall.sh\nuninstall.sh\nupgrade.sh\nxdrive' ]] || { printf 'Release archive has unexpected paths.\n' >&2; exit 1; }
-tar -C "$temporary_dir" -xzf "$archive"
-[[ -f $temporary_dir/xdrive && ! -L $temporary_dir/xdrive && -f $temporary_dir/upgrade.sh && ! -L $temporary_dir/upgrade.sh && -f $temporary_dir/uninstall.sh && ! -L $temporary_dir/uninstall.sh && -f $temporary_dir/RELEASE.txt && ! -L $temporary_dir/RELEASE.txt ]] || {
-  printf 'Release archive has invalid file types.\n' >&2; exit 1;
-}
-grep -Fxq 'os=linux' "$temporary_dir/RELEASE.txt" || { printf 'Release is not for Linux.\n' >&2; exit 1; }
-grep -Fxq "architecture=$architecture" "$temporary_dir/RELEASE.txt" || { printf 'Release architecture mismatch.\n' >&2; exit 1; }
-release_version=$(sed -n 's/^version=//p' "$temporary_dir/RELEASE.txt")
+if ! LC_ALL=C tar -tzf "$archive" | LC_ALL=C awk '
+  {
+    if ($0 !~ /^[A-Za-z0-9_.-]+(\/[A-Za-z0-9_.-]+)*$/ || length($0) > 240 || seen[$0]++) exit 1
+    count = split($0, parts, "/")
+    for (i=1; i<=count; i++) if (parts[i] == "." || parts[i] == "..") exit 1
+  }
+  END { if (!seen["xdrive"] || !seen["install.sh"] || !seen["upgrade.sh"] || !seen["uninstall.sh"] || !seen["RELEASE.txt"]) exit 1 }
+'; then
+  printf 'Release archive has unsafe, duplicate or missing paths.\n' >&2
+  exit 1
+fi
+# Extract only the authenticated bootstrap executable to a literal output file.
+# It validates the complete manifest before writing any package resource.
+tar -xOzf "$archive" xdrive > "$temporary_dir/package-reader"
+chmod 0755 "$temporary_dir/package-reader"
+mkdir "$temporary_dir/package"
+"$temporary_dir/package-reader" release-package prepare --archive "$archive" \
+  --root "$temporary_dir/package" --architecture "$architecture"
+package_dir="$temporary_dir/package"
+grep -Fxq 'os=linux' "$package_dir/RELEASE.txt" || { printf 'Release is not for Linux.\n' >&2; exit 1; }
+grep -Fxq "architecture=$architecture" "$package_dir/RELEASE.txt" || { printf 'Release architecture mismatch.\n' >&2; exit 1; }
+release_version=$(sed -n 's/^version=//p' "$package_dir/RELEASE.txt")
 [[ $release_version =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || { printf 'Release version is invalid.\n' >&2; exit 1; }
-binary_version=$("$temporary_dir/xdrive" version)
+binary_version=$("$package_dir/xdrive" version)
 [[ $binary_version == "xdrive $release_version ("* ]] || { printf 'Release metadata and binary version disagree.\n' >&2; exit 1; }
 printf '%s\n' "$binary_version"
 
@@ -279,9 +296,12 @@ fi
 install -d -m 0700 -o xdrive -g xdrive "$data_dir"
 install -d -m 0750 -o root -g xdrive /etc/xdrive
 install -d -m 0755 -o root -g root /usr/local/libexec/xdrive
-install -m 0755 -o root -g root "$temporary_dir/xdrive" /usr/local/libexec/xdrive/xdrive
-install -m 0755 -o root -g root "$temporary_dir/upgrade.sh" /usr/local/libexec/xdrive/upgrade.sh
-install -m 0755 -o root -g root "$temporary_dir/uninstall.sh" /usr/local/libexec/xdrive/uninstall.sh
+[[ -z $(find /usr/local/libexec/xdrive -mindepth 1 -maxdepth 1 -print -quit) ]] || {
+  printf 'The application directory contains unrelated files; no release files were installed.\n' >&2; exit 1;
+}
+cp -pR "$package_dir/." /usr/local/libexec/xdrive/
+chown -R root:root /usr/local/libexec/xdrive
+"$temporary_dir/package-reader" release-package sync-tree --root /usr/local/libexec/xdrive
 ln -s /usr/local/libexec/xdrive/xdrive /usr/local/bin/xdrive
 cat > /etc/xdrive/config.toml <<EOF
 listen_addr = "127.0.0.1:8787"
