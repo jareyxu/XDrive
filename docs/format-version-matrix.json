@@ -2,16 +2,16 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v1.3.5",
-    "reviewedAt": "2026-10-09",
+    "version": "v1.3.6",
+    "reviewedAt": "2026-10-10",
     "reviewer": "User attestation in project conversation; personal identity not provided",
     "evidence": [
-      "The user confirmed completion of the previously open backup/restore compatibility rehearsal and independent security review plus second format review. Reviewer identity and underlying private review material are not published in this repository.",
-      "V1.3.5 adds local HEIC/HEIF image preview and thumbnail conversion. Original files remain stored with the existing client-side encryption; this release does not change encrypted payloads, key derivation, AAD, metadata transactions, SQLite schema, backup container version, or client mutation protocol.",
-      "The HEIC decoder is lazy-loaded locally, bounded by a 32 MiB input limit, and distributed with its LGPL-3.0 license notice and license text. Release validation covers the HEIC unit tests, frontend build, full project checks, and Linux amd64/arm64 package contents."
+      "The user confirmed completion of the previously open backup/restore compatibility rehearsal and independent security review plus second format review. This release preserves the approved crypto, metadata, SQLite, backup, and mutation contracts.",
+      "V1.3.6 repairs the v1.3.4-to-v1.3.5 web upgrade failure by preserving the legacy five-member release archive layout. Third-party notice and full LGPL-3.0 text are appended to RELEASE.txt; the archive layout remains compatible with deployed v1.3.4 upgrade scripts.",
+      "The release changes no encrypted payload, key derivation, AAD, metadata transaction, SQLite schema, backup container, or client mutation protocol. Release CI validates the source checks and packages both supported Linux architectures."
     ]
   },
-  "scope": "XDrive V1.3.5 HEIC/HEIF local preview and thumbnail support; persistent formats and mutation protocol unchanged from V1.3.4",
+  "scope": "XDrive V1.3.6 HEIC/HEIF preview with backward-compatible Linux package layout; persistent formats and mutation protocol unchanged from V1.3.5",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,

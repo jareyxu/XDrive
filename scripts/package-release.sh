@@ -57,19 +57,23 @@ for architecture in amd64 arm64; do
   cp scripts/install.sh "$stage/install.sh"
   cp scripts/upgrade.sh "$stage/upgrade.sh"
   cp scripts/uninstall.sh "$stage/uninstall.sh"
-  cp THIRD_PARTY_NOTICES.txt "$stage/THIRD_PARTY_NOTICES.txt"
-  cp LGPL-3.0-heic-to.txt "$stage/LGPL-3.0-heic-to.txt"
   cat > "$stage/RELEASE.txt" <<RELEASE_EOF
 version=$release_version
 commit=$commit
 os=linux
 architecture=$architecture
 RELEASE_EOF
+  {
+    printf '\n\n'
+    sed 's/The full LGPL-3.0 license text is included in LGPL-3.0-heic-to.txt./The full LGPL-3.0 license text follows in this RELEASE.txt file./' THIRD_PARTY_NOTICES.txt
+    printf '\n\nFull LGPL-3.0 license text for bundled heic-to 1.6.5:\n\n'
+    cat LGPL-3.0-heic-to.txt
+  } >> "$stage/RELEASE.txt"
   chmod 0755 "$stage/xdrive" "$stage/install.sh" "$stage/upgrade.sh" "$stage/uninstall.sh"
   artifact="xdrive-${release_version}-linux-${architecture}.tar.gz"
-  COPYFILE_DISABLE=1 tar -C "$stage" -czf "$output_stage/$artifact" xdrive install.sh upgrade.sh uninstall.sh RELEASE.txt THIRD_PARTY_NOTICES.txt LGPL-3.0-heic-to.txt
+  COPYFILE_DISABLE=1 tar -C "$stage" -czf "$output_stage/$artifact" xdrive install.sh upgrade.sh uninstall.sh RELEASE.txt
   archive_members=$(tar -tzf "$output_stage/$artifact" | LC_ALL=C sort)
-  [[ $archive_members == $'LGPL-3.0-heic-to.txt\nRELEASE.txt\nTHIRD_PARTY_NOTICES.txt\ninstall.sh\nuninstall.sh\nupgrade.sh\nxdrive' ]] || {
+  [[ $archive_members == $'RELEASE.txt\ninstall.sh\nuninstall.sh\nupgrade.sh\nxdrive' ]] || {
     printf 'Release archive contains unexpected paths; refusing to publish it.\n' >&2
     exit 1
   }

@@ -65,14 +65,17 @@ esac
 ''')
         candidate.chmod(0o755)
         self.new_binary = candidate.read_bytes()
-        (self.release / "RELEASE.txt").write_text("os=linux\narchitecture=amd64\nversion=v1.3.1\n")
+        (self.release / "RELEASE.txt").write_text(
+            "os=linux\narchitecture=amd64\nversion=v1.3.1\n\n"
+            + (ROOT / "THIRD_PARTY_NOTICES.txt").read_text()
+            + "\n\n"
+            + (ROOT / "LGPL-3.0-heic-to.txt").read_text()
+        )
         for helper in ["install.sh", "upgrade.sh", "uninstall.sh"]:
             (self.release / helper).write_text("new " + helper + "\n")
-        for name in ["THIRD_PARTY_NOTICES.txt", "LGPL-3.0-heic-to.txt"]:
-            shutil.copy2(ROOT / name, self.release / name)
         self.bundle = self.root / "release.tar.gz"
         with tarfile.open(self.bundle, "w:gz") as archive:
-            for name in ["RELEASE.txt", "install.sh", "uninstall.sh", "upgrade.sh", "xdrive", "THIRD_PARTY_NOTICES.txt", "LGPL-3.0-heic-to.txt"]:
+            for name in ["RELEASE.txt", "install.sh", "uninstall.sh", "upgrade.sh", "xdrive"]:
                 archive.add(self.release / name, arcname=name)
         self.digest = hashlib.sha256(self.bundle.read_bytes()).hexdigest()
         self.commands = self.root / "commands"
@@ -403,7 +406,7 @@ if ! grep -q 'being upgraded' "$TEST_SITE" && [[ ${TEST_FAIL_PROXY_VALIDATE:-0} 
         extracted = observe_extraction(self.root, self.commands)
         target = self.root / "outside"
         target.write_bytes(b"outside-preserved")
-        for name, kind in [(name, kind) for name in ["RELEASE.txt", "xdrive", "install.sh", "upgrade.sh", "uninstall.sh", "THIRD_PARTY_NOTICES.txt", "LGPL-3.0-heic-to.txt"]
+        for name, kind in [(name, kind) for name in ["RELEASE.txt", "xdrive", "install.sh", "upgrade.sh", "uninstall.sh"]
                            for kind in [tarfile.DIRTYPE, tarfile.SYMTYPE, tarfile.LNKTYPE, tarfile.FIFOTYPE]]:
             with self.subTest(name=name, kind=kind):
                 self.bundle.write_bytes(original)
