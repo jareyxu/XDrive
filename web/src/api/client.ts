@@ -42,7 +42,7 @@ import type { UploadPiece, UploadResumeRecord } from '../uploads/resume'
 import { observeRevisionBaseline, recordRevisionMaxima, replaceRevisionBaseline } from '../security/revision-baseline'
 import type { RevisionObservation, RollbackFinding } from '../security/revision-baseline'
 
-import { createChunkRangeReader } from '../media/chunk-range-reader'
+import { createChunkRangeReader, type RangeReaderOptions } from '../media/chunk-range-reader'
 import { ConcurrentMutationRetryExhaustedError, retryTraversalMutation } from '../index/traversal-retry'
 import { NetworkUnavailableError, retryNetworkRequest } from './network-retry'
 
@@ -1916,7 +1916,7 @@ async function writeZipSelection(
 }
 
 /** Reads authenticated plaintext ranges without ever materializing the whole file. */
-export async function createEncryptedRangeReader(vault: Pick<UnlockedVault, 'vaultKey' | 'dataKey'>, entry: DriveEntry, signal?: AbortSignal, onNetworkWaiting: (waiting: boolean) => void = () => undefined): Promise<EncryptedRangeReader> {
+export async function createEncryptedRangeReader(vault: Pick<UnlockedVault, 'vaultKey' | 'dataKey'>, entry: DriveEntry, signal?: AbortSignal, onNetworkWaiting: (waiting: boolean) => void = () => undefined, options: RangeReaderOptions = {}): Promise<EncryptedRangeReader> {
   if (!entry.fileId || !entry.manifestObjectId || !entry.manifestSha256 || !Number.isSafeInteger(entry.size) || entry.size === undefined || entry.size < 0) {
     throw new TypeError('文件目录项不完整。')
   }
@@ -1941,7 +1941,7 @@ export async function createEncryptedRangeReader(vault: Pick<UnlockedVault, 'vau
       plaintext = undefined
       return result
     } finally { encrypted.fill(0); aad.fill(0); plaintext?.fill(0) }
-  }, signal)
+  }, signal, options)
 }
 
 async function collectTombstoneMembers(vault: UnlockedVault, root: DriveEntry, signal?: AbortSignal): Promise<Map<string, 'object' | 'metadata'>> {

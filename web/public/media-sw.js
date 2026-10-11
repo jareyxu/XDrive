@@ -185,6 +185,8 @@ self.addEventListener('fetch', (event) => {
 function closeSession(session) {
   if (sessions.get(session.id) !== session) return
   sessions.delete(session.id)
+  session.responses.forEach((response) => response.abort())
+  session.responses.clear()
   for (const pending of session.pending.values()) {
     clearPendingTimers(pending)
     pending.reject(new DOMException('Media owner disappeared', 'AbortError'))
@@ -206,7 +208,7 @@ self.addEventListener('message', (event) => {
   }
   if (sessions.has(data.sessionId)) { port.close(); return }
   if (sessions.size >= MAX_SESSIONS) closeSession(sessions.values().next().value)
-  const session = { id: data.sessionId, length: data.length, mime: data.mime, ownerId: event.source.id, port, pending: new Map() }
+  const session = { id: data.sessionId, length: data.length, mime: data.mime, ownerId: event.source.id, port, pending: new Map(), responses: new Set() }
   sessions.set(session.id, session)
   port.onmessage = (replyEvent) => {
     const reply = replyEvent.data
@@ -219,6 +221,11 @@ self.addEventListener('message', (event) => {
       } catch { /* A detached buffer has no remaining bytes accessible here. */ }
     }
     if (reply.type === 'close') { discardReplyBytes(); closeSession(session); return }
+    if (reply.type === 'cancel-reads' && Object.keys(reply).length === 2 && Array.isArray(reply.readIds) && reply.readIds.length <= 32 && reply.readIds.every(Number.isSafeInteger)) {
+      discardReplyBytes()
+      session.responses.forEach((response) => { if (reply.readIds.includes(response.readId())) response.abort() })
+      return
+    }
     if (reply.type !== 'read-result' || !Number.isSafeInteger(reply.readId)) { discardReplyBytes(); return }
     const pending = session.pending.get(reply.readId)
     if (!pending) { discardReplyBytes(); return }
@@ -318,13 +325,17 @@ self.addEventListener('fetch', (event) => {
     const stop = () => {
       if (stopped) return
       stopped = true
+      session.responses.delete(responseState)
       detach()
       cancelRead()
     }
     const onAbort = () => {
+      if (stopped) return
       stop()
       responseController?.error(new DOMException('Media fetch was cancelled', 'AbortError'))
     }
+    const responseState = { readId: () => activeReadId, abort: onAbort }
+    session.responses.add(responseState)
     const body = new ReadableStream({
       start(controller) {
         responseController = controller

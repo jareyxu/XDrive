@@ -1,6 +1,21 @@
 import { expect, test, vi } from 'vitest'
 import { createChunkRangeReader } from './chunk-range-reader'
 
+test('phone budget retains only two chunks and wipes eviction plus destruction', async () => {
+  const buffers: Uint8Array[] = []
+  const load = vi.fn(async (index: number) => { const bytes = new Uint8Array(8).fill(index + 1); buffers.push(bytes); return bytes })
+  const reader = createChunkRangeReader(32, 8, load, undefined, { cacheChunks: 2, concurrency: 1 })
+  await reader.readRange(0, 1)
+  await reader.readRange(8, 9)
+  await reader.readRange(16, 17)
+  expect([...buffers[0]!]).toEqual(Array(8).fill(0))
+  expect(buffers.filter(bytes => bytes.some(value => value !== 0))).toHaveLength(2)
+  await reader.readRange(8, 9)
+  expect(load).toHaveBeenCalledTimes(3)
+  reader.destroy()
+  expect(buffers.every(bytes => bytes.every(value => value === 0))).toBe(true)
+})
+
 function deferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>((complete) => { resolve = complete })

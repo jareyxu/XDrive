@@ -24,6 +24,26 @@ function harness(download = false) {
 async function microtasks() { for (let i = 0; i < 12; i++) await Promise.resolve() }
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks() })
 
+test('seek cancellation closes the old response but keeps the session available for a new request', async () => {
+  const worker = harness(), signal = new AbortController().signal
+  const oldResponse = (await worker.fetch(signal)).response
+  const pending = oldResponse.body!.getReader().read()
+  const rejection = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  await microtasks()
+  const oldRead = worker.messages.find(message => message.type === 'read')
+  worker.port.onmessage({ data: { type: 'cancel-reads', readIds: [oldRead.readId] } })
+  await rejection
+  expect(worker.port.close).not.toHaveBeenCalled()
+  const next = (await worker.fetch(signal)).response.body!.getReader()
+  const result = next.read()
+  await microtasks()
+  const newRead = worker.messages.filter(message => message.type === 'read').at(-1)
+  expect(newRead.readId).not.toBe(oldRead.readId)
+  worker.port.onmessage({ data: { type: 'read-result', readId: newRead.readId, bytes: new Uint8Array([4, 5]) } })
+  expect((await result).value).toEqual(new Uint8Array([4, 5]))
+  await next.cancel()
+})
+
 test('a foreign request prunes a disappeared media owner, rejects its pending stream and wipes late bytes', async () => {
   vi.useFakeTimers()
   const worker = harness(), signal = new AbortController().signal

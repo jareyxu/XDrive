@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   controlledRelayWorker: vi.fn(),
@@ -9,7 +9,7 @@ vi.mock('../sw/controller', () => ({ controlledRelayWorker: mocks.controlledRela
 vi.mock('../api/client', () => ({ createEncryptedRangeReader: mocks.createEncryptedRangeReader }))
 
 import { createVideoRangeSession } from './video-range'
-import { supportsVideoRange } from './video-range'
+import { supportsVideoRange, verifyVideoRange, VideoStreamError } from './video-range'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -22,15 +22,30 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-test('video Range capability keeps unverified Gecko and mobile paths on the bounded fallback', () => {
-  expect(supportsVideoRange('Mozilla/5.0 Safari/605.1', true, true)).toBe(true)
-  expect(supportsVideoRange('Mozilla/5.0 Firefox/155.0', true, true)).toBe(false)
-  expect(supportsVideoRange('Mozilla/5.0 FxiOS/155.0', true, true)).toBe(false)
-  expect(supportsVideoRange('Mozilla/5.0 Chrome/153.0 Mobile', true, true)).toBe(false)
-  expect(supportsVideoRange('Mozilla/5.0 Macintosh; Intel Mac OS X', true, true, 5)).toBe(false)
-  expect(supportsVideoRange('Mozilla/5.0 Macintosh; Intel Mac OS X', true, true, 0)).toBe(true)
-  expect(supportsVideoRange('Mozilla/5.0 Safari/605.1', false, true)).toBe(false)
-  expect(supportsVideoRange('Mozilla/5.0 Safari/605.1', true, false)).toBe(false)
+beforeEach(() => {
+  vi.stubGlobal('window', Object.assign(new EventTarget(), { setTimeout: globalThis.setTimeout.bind(globalThis), clearTimeout: globalThis.clearTimeout.bind(globalThis) }))
+  vi.stubGlobal('fetch', vi.fn(async (_url, init) => {
+    const match = /bytes=(\d+)-(\d+)/u.exec(init.headers.Range)!
+    const begin = Number(match[1]), end = Number(match[2])
+    return new Response(new Uint8Array(end - begin + 1), { status: 206, headers: { 'Content-Range': `bytes ${begin}-${end}/4096`, 'Content-Length': String(end - begin + 1) } })
+  }))
+})
+
+test('video Range capability checks runtime APIs rather than excluding phones', () => {
+  expect(supportsVideoRange(true, true, true, true)).toBe(true)
+  for (let unavailable = 0; unavailable < 4; unavailable++) {
+    const capabilities = [true, true, true, true]
+    capabilities[unavailable] = false
+    expect(supportsVideoRange(...capabilities as [boolean, boolean, boolean, boolean])).toBe(false)
+  }
+})
+
+test('phone and desktop-mode iPad use a two-chunk cache and one read at a time', async () => {
+  const { videoReaderBudget } = await import('./video-range')
+  expect(videoReaderBudget('iPhone Mobile', 5)).toEqual({ cacheChunks: 2, concurrency: 1 })
+  expect(videoReaderBudget('Android Chrome Mobile', 5)).toEqual({ cacheChunks: 2, concurrency: 1 })
+  expect(videoReaderBudget('Macintosh Safari', 5)).toEqual({ cacheChunks: 2, concurrency: 1 })
+  expect(videoReaderBudget('Macintosh Safari', 0)).toEqual({ cacheChunks: 4, concurrency: 2 })
 })
 
 test('pagehide closes a video Range session, aborts active decryption, and erases a late plaintext window', async () => {
@@ -82,7 +97,7 @@ test('pagehide closes a video Range session, aborts active decryption, and erase
   await vi.waitFor(() => expect(messages).toContainEqual({ type: 'close' }))
 
   await new Promise((resolve) => setTimeout(resolve, 0))
-  expect(messages).toEqual([{ type: 'close' }])
+  expect(messages).toEqual([{ type: 'cancel-reads', readIds: [17] }, { type: 'close' }])
   session.close()
   workerPort.close()
 })
@@ -123,4 +138,24 @@ test('a seek cancels page-owned Range reads and returns the pending read error t
   await vi.waitFor(() => expect(messages).toContainEqual({ type: 'read-result', readId: 23, error: 'read_failed' }))
   session.close()
   workerPort.close()
+})
+
+
+test('range verification rejects a full response before reading its body', async () => {
+  const cancel = vi.fn()
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream({ cancel }), { status: 200 })))
+  await expect(verifyVideoRange('/__xdrive_media/session', 4096)).rejects.toBeInstanceOf(VideoStreamError)
+  expect(cancel).toHaveBeenCalledOnce()
+})
+
+test('range verification reads the beginning and tail and rejects mismatched headers', async () => {
+  await verifyVideoRange('/__xdrive_media/session', 4096)
+  expect(vi.mocked(fetch).mock.calls.map(([, init]) => (init!.headers as Record<string, string>).Range)).toEqual(['bytes=0-1', 'bytes=4094-4095'])
+  vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(2), { status: 206, headers: { 'Content-Length': '2', 'Content-Range': 'bytes 0-1/9999' } })))
+  await expect(verifyVideoRange('/__xdrive_media/session', 4096)).rejects.toMatchObject({ kind: 'session' })
+})
+
+test('AEAD authentication failures are integrity errors rather than network errors', async () => {
+  mocks.createEncryptedRangeReader.mockRejectedValueOnce(new DOMException('authentication failed', 'OperationError'))
+  await expect(createVideoRangeSession({} as never, { kind: 'file', mime: 'video/mp4' } as never)).rejects.toMatchObject({ kind: 'integrity' })
 })

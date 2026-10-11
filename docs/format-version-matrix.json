@@ -2,18 +2,18 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v2.0.1",
+    "version": "v2.0.2",
     "reviewedAt": "2026-10-11",
-    "reviewer": "Release gate review for the user-authorized v2.0.1 publication; format contracts checked against the unchanged matrix",
+    "reviewer": "Release gate review for the user-authorized v2.0.2 publication; mobile real-device acceptance delegated to the user",
     "evidence": [
-      "This release corrects the v2.0.0 desktop interface after review of the reference design and VPS screenshots. Encrypted object, key derivation, AAD, directory, trash, manifest, backup, SQLite, and client mutation contracts remain unchanged from v1.3.7.",
-      "Full local make test passed: frontend typecheck/lint/build, Go vet and tests, installer/update tests, 533 web tests, and 3 TLS proxy tests. Exact-commit Linux CI remains a release gate.",
-      "Chromium UI checks covered 1672x941 desktop and 390x844 mobile layouts, settings categories and theme, real encrypted upload, image thumbnail/preview, trash restore, window controls, and removal of decrypted filenames after lock. This is not a real-device Safari/Android certification.",
-      "Publication remains gated on successful exact-commit main CI on Ubuntu 24.04, including all-package race checks and Linux amd64/arm64 cross-builds; the release workflow builds and checksum-publishes both architectures.",
-      "Manual browser screenshot and mobile-device visual QA were not performed and are not claimed as verified."
+      "This release enables runtime-probed encrypted Range playback on mobile browsers with bounded caches and cancellation, and restores playback positions after foreground return. Persistent cryptographic, SQLite, backup, and client mutation contracts remain unchanged from v1.3.7.",
+      "Full local make test passed: frontend typecheck/lint/build, Go vet/tests, installer/update tests, web tests and TLS proxy tests. The final frontend error-path changes received a supplementary typecheck, complete unit suite, lint and production build; exact-commit Linux CI remains a release gate.",
+      "Local Chromium Pixel 10 emulation passed real encrypted upload and native playback/seek of a valid 257 MiB MP4 (a 3-second fixture padded with a free box), simulated hidden/visible session replacement restoring 1.2 seconds without autoplay, and idle lock erasing decrypted filenames and returning 410 for the old media URL. This does not certify content-heavy large videos or real mobile devices.",
+      "Real-device iOS Safari and Android acceptance is pending and will be performed by the user, who explicitly requested immediate v2.0.2 stable publication. Local browser emulation is not real-device certification.",
+      "Publication remains gated on successful exact-commit main CI including all-package race tests and Linux amd64/arm64 cross-builds; the release workflow checksum-publishes both architectures."
     ]
   },
-  "scope": "XDrive v2.0.1 desktop UI polish based on reference and VPS screenshot review; persistent data, cryptographic, SQLite, backup, and client mutation contracts unchanged from v1.3.7",
+  "scope": "XDrive v2.0.2 mobile encrypted video Range playback, bounded memory and session recovery; persistent data formats unchanged from v1.3.7",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,

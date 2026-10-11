@@ -54,7 +54,6 @@ import {
   deleteSelectedEntries,
   downloadFile,
   fetchTextPreviewLimit,
-  fetchVideoBlobFallbackLimit,
   fetchTrashRetentionLabel,
   fetchCurrentSession,
   fetchStatus,
@@ -92,6 +91,8 @@ import { convertHeicToJpeg, isHeicImage } from './media/heic'
 import './App.css'
 import './styles/desktop.css'
 import { FileGlyph } from './components/FileGlyph'
+import { VideoPreview } from './components/VideoPreview'
+import { formatBytes } from './utils/format-bytes'
 
 const SettingsScreen = lazy(() => import('./components/SettingsScreen').then(module => ({ default: module.SettingsScreen })))
 const MarkdownPreview = lazy(() => import('./components/MarkdownPreview').then(module => ({ default: module.MarkdownPreview })))
@@ -1902,72 +1903,6 @@ function PreviewDialog(props: { preview: PreviewState; vault: UnlockedVault; hol
   </dialog>
 }
 
-function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; holdIdleLock: (kind: IdleLockTask) => () => void }) {
-  const [source, setSource] = useState('')
-  const [error, setError, errorRequestId] = useErrorNotice()
-  const [retry, setRetry] = useState(0)
-  const video = useRef<HTMLVideoElement>(null)
-  const playbackHold = useRef<(() => void) | null>(null)
-  const cancelPendingVideoReads = useRef<() => void>(() => {})
-  const stopPlaying = () => { playbackHold.current?.(); playbackHold.current = null }
-  const resumePlaying = () => {
-    const element = video.current
-    if (element && !element.paused && !element.ended && !element.seeking && element.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA && !playbackHold.current) {
-      try { playbackHold.current = props.holdIdleLock('video') } catch { element.pause() }
-    }
-  }
-  useEffect(() => {
-    const element = video.current
-    return () => { element?.pause(); element?.removeAttribute('src'); element?.load(); playbackHold.current?.(); playbackHold.current = null }
-  }, [source])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    let disposed = false
-    let rangeSession: import('./media/video-range').VideoRangeSession | undefined
-    let blobURL = ''
-    void (async () => {
-      try {
-        const module = await import('./media/video-range')
-        if (!module.supportsVideoRange()) throw new TypeError('当前浏览器或设备暂不支持有界流式视频播放。')
-        rangeSession = await module.createVideoRangeSession(props.vault, props.entry, controller.signal)
-        if (disposed) { rangeSession.close(); return }
-        cancelPendingVideoReads.current = rangeSession.cancelPendingReads
-        setSource(rangeSession.url)
-      } catch (rangeError) {
-        if (disposed) return
-        try {
-          const limit = await fetchVideoBlobFallbackLimit(controller.signal)
-          if (disposed) return
-          if (!Number.isSafeInteger(props.entry.size) || props.entry.size === undefined || props.entry.size < 0) throw new TypeError('视频目录项不完整，请下载后播放。')
-          if (props.entry.size > limit) {
-            setError(`当前浏览器无法建立流式播放会话；此视频超过 ${formatBytes(limit)} 内存播放上限，请下载后播放。`, rangeError)
-            return
-          }
-          const blob = await downloadFile(props.vault, props.entry, controller.signal)
-          if (!blob || disposed) return
-          blobURL = URL.createObjectURL(blob)
-          setSource(blobURL)
-        } catch (cause) {
-          if (!disposed) setError(cause instanceof TypeError ? cause.message : '无法打开此视频，请下载后播放。', cause)
-        }
-      }
-    })()
-    return () => {
-      disposed = true
-      controller.abort()
-      cancelPendingVideoReads.current = () => {}
-      rangeSession?.close()
-      if (blobURL) URL.revokeObjectURL(blobURL)
-    }
-  }, [props.vault, props.entry, retry, setError])
-
-  return <div className="video-preview-area">
-    {source && <video ref={video} className="preview-video" src={source} controls playsInline onPlaying={resumePlaying} onSeeked={resumePlaying} onPause={stopPlaying} onEnded={stopPlaying} onWaiting={stopPlaying} onSeeking={() => { stopPlaying(); if ((video.current?.currentTime ?? 0) > 0) cancelPendingVideoReads.current() }} onError={() => { stopPlaying(); setError('浏览器无法播放此编码，或播放会话已中断。') }} />}
-    {!source && !error && <p role="status">正在建立本地解密播放会话…</p>}
-    {error && <div className="preview-fallback" role="alert"><p>{error}<RequestIdControl requestId={errorRequestId} /></p><button type="button" onClick={() => { setSource(''); setError(''); setRetry((value) => value + 1) }}>重试播放</button></div>}
-  </div>
-}
 
 function PDFPreview(props: { vault: UnlockedVault; entry: DriveEntry }) {
   const vaultKey = props.vault.vaultKey
@@ -2197,14 +2132,7 @@ function describeLoginError(error: unknown): string {
   return '无法解锁云盘。请检查连接和密码后重试。'
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let value = bytes
-  let index = -1
-  do { value /= 1024; index += 1 } while (value >= 1024 && index < units.length - 1)
-  return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[index]}`
-}
+
 
 export default App
 

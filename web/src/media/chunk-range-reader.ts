@@ -4,6 +4,11 @@ export interface ChunkRangeReader {
   destroy(): void
 }
 
+export interface RangeReaderOptions {
+  cacheChunks?: 1 | 2 | 3 | 4
+  concurrency?: 1 | 2
+}
+
 const abortError = () => new DOMException('Range reader closed or cancelled', 'AbortError')
 
 /** Owned loader buffers are zeroed on eviction, failure and destruction. */
@@ -12,11 +17,15 @@ export function createChunkRangeReader(
   chunkSize: number,
   load: ((index: number, signal: AbortSignal) => Promise<Uint8Array>) | null,
   ownerSignal?: AbortSignal,
+  options: RangeReaderOptions = {},
 ): ChunkRangeReader {
   if (!Number.isSafeInteger(length) || length < 0 || !Number.isSafeInteger(chunkSize) || chunkSize < 1) throw new RangeError('Invalid chunk layout')
   const lifetime = new AbortController()
-  const ranges = new Gate(2, 32)
-  const loads = new Gate(2, 32)
+  const cacheChunks = options.cacheChunks ?? 4
+  const concurrency = options.concurrency ?? 2
+  if (![1, 2, 3, 4].includes(cacheChunks) || ![1, 2].includes(concurrency)) throw new RangeError('Invalid range reader budget')
+  const ranges = new Gate(concurrency, 32)
+  const loads = new Gate(concurrency, 32)
   type Entry = { bytes?: Uint8Array; promise: Promise<Uint8Array>; controller: AbortController; users: number }
   const cache = new Map<number, Entry>()
   const pending = new Map<number, Entry>()
@@ -48,7 +57,7 @@ export function createChunkRangeReader(
           lifetime.signal.throwIfAborted()
           if (bytes.byteLength !== Math.min(chunkSize, length - index * chunkSize)) throw new TypeError('Invalid plaintext chunk length')
           // Consumers pin buffers until their synchronous copy finishes.
-          while (cache.size >= 4) {
+          while (cache.size >= cacheChunks) {
             const victim = [...cache].find(([, item]) => item.users === 0)
             if (!victim) throw new Error('All chunk cache slots are pinned')
             victim[1].bytes?.fill(0)
