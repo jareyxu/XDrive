@@ -1,7 +1,6 @@
 import { Breadcrumbs } from './components/Breadcrumbs'
 import { RequestIdControl } from './components/RequestIdControl'
 import { useErrorNotice } from './components/use-error-notice'
-import { BackupNotice } from './components/BackupNotice'
 import { DeleteSelectionDialog } from './components/DeleteSelectionDialog'
 import { ThumbnailCache } from './media/thumbnail-cache'
 import { ThumbnailImage } from './components/ThumbnailImage'
@@ -21,7 +20,8 @@ import { TransferStore, type TransferUpdate } from './transfers/transfer-store'
 import { VirtualEntryList } from './components/VirtualEntryList'
 import { FolderConflictDialog } from './components/FolderConflictDialog'
 import { TransferPanel } from './components/TransferPanel'
-import { setPreferences, usePreferences } from './preferences/preferences'
+import { FolderTree } from './components/FolderTree'
+import { backupIsOverdue, effectiveBackupReminderDays, setPreferences, usePreferences } from './preferences/preferences'
 import { useIdleLock } from './security/use-idle-lock'
 import { useAuthAttempt } from './security/use-auth-attempt'
 import type { IdleLockTask } from './security/idle-lock'
@@ -35,8 +35,8 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { useLocation, useNavigate } from 'react-router'
 import { browserMutations } from './index/browser-coordination'
 import type { WriterState } from './index/mutation-coordinator'
-import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, FormEvent, ReactNode } from 'react'
-import { Archive, ArrowDownToLine, ArrowUpFromLine, CornerUpLeft, File, FilePenLine, Folder, FolderPlus, HardDrive, LockKeyhole, LogOut, MoveRight, ShieldCheck, Trash2, RotateCcw, LayoutGrid, List, MoreHorizontal } from 'lucide-react'
+import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, FormEvent, ReactNode } from 'react'
+import { Archive, ArrowDownToLine, ArrowUpFromLine, Bell, ChevronDown, CornerUpLeft, File, FilePenLine, Folder, FolderPlus, HardDrive, LockKeyhole, LogOut, MoveRight, ShieldCheck, Trash2, RotateCcw, LayoutGrid, List, MoreHorizontal, Settings, Maximize2, Minimize2, X, UserRound } from 'lucide-react'
 import {
   APIError,
   SetupCommittedError,
@@ -397,9 +397,45 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
   const [preview, setPreview] = useState<PreviewState | null>(null)
   const location = useLocation()
   const navigate = useNavigate()
+  const lastDriveRoute = useRef(location.pathname === '/drive' || location.pathname.startsWith('/drive/') ? location.pathname : '/drive')
+  useEffect(() => {
+    if (location.pathname === '/drive' || location.pathname.startsWith('/drive/')) lastDriveRoute.current = location.pathname
+  }, [location.pathname])
   const activeView = location.pathname === '/settings' ? 'settings' : location.pathname === '/storage' ? 'storage' : location.pathname === '/trash' ? 'trash' : 'drive'
-  const setActiveView = (view: 'drive' | 'trash' | 'storage' | 'settings') => { void navigate(`/${view}`) }
+  const [windowOpen, setWindowOpen] = useState(true)
+  const [windowMinimized, setWindowMinimized] = useState(false)
+  const [windowMaximized, setWindowMaximized] = useState(false)
+  const [windowRect, setWindowRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
+  const [dragStart, setDragStart] = useState<{ pointerId: number; x: number; y: number; left: number; top: number } | null>(null)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [mobileTreeOpen, setMobileTreeOpen] = useState(false)
+  const [readTransferNotifications, setReadTransferNotifications] = useState<ReadonlySet<string>>(() => new Set())
+  const [systemUpdateNotice, setSystemUpdateNotice] = useState<{ message: string; isError: boolean; read: boolean } | null>(null)
+  const publishUpdateNotice = useCallback((message: string, isError: boolean) => setSystemUpdateNotice({ message, isError, read: false }), [])
+  const windowRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!accountMenuOpen && !notificationsOpen) return
+    const dismiss = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Element && !target.closest('.desktop-topbar')) { setAccountMenuOpen(false); setNotificationsOpen(false) }
+    }
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { setAccountMenuOpen(false); setNotificationsOpen(false) }
+    }
+    document.addEventListener('pointerdown', dismiss)
+    document.addEventListener('keydown', keydown)
+    return () => { document.removeEventListener('pointerdown', dismiss); document.removeEventListener('keydown', keydown) }
+  }, [accountMenuOpen, notificationsOpen])
+  const setActiveView = (view: 'drive' | 'trash' | 'storage' | 'settings') => {
+    setWindowOpen(true); setWindowMinimized(false); setAccountMenuOpen(false); setNotificationsOpen(false)
+    void navigate(view === 'drive' ? lastDriveRoute.current : `/${view}`)
+  }
   const { rootIndexId: routeRootId, metadataKey: routeMetadataKey } = props.vault
+  const navigateTree = (indexId: string, ancestors: readonly string[]) => {
+    setWindowOpen(true); setWindowMinimized(false); setMobileTreeOpen(false)
+    void navigate(indexId === routeRootId ? '/drive' : `/drive/${indexId}`, { state: { ancestors } })
+  }
   const [routeAttempt, setRouteAttempt] = useState(0)
   const routeNavigation = useRef<string | null>(null)
   const [routeUnavailable, setRouteUnavailable] = useState(false)
@@ -639,8 +675,14 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
     })
   }
   const cancelTasks = () => taskControllers.current.forEach((controller) => controller.abort())
-  const lockAndCancel = () => { screenActive.current = false; transfers.close(); selection.close(); cancelTasks(); props.onLock() }
-  const logoutAndCancel = () => { screenActive.current = false; transfers.close(); selection.close(); cancelTasks(); props.onLogout() }
+  const lockAndCancel = () => {
+    if (hasActiveTransfers && !window.confirm('锁定会停止当前上传、下载和预览。确定继续吗？')) return
+    setAccountMenuOpen(false); screenActive.current = false; transfers.close(); selection.close(); cancelTasks(); props.onLock()
+  }
+  const logoutAndCancel = () => {
+    if (hasActiveTransfers && !window.confirm('退出登录会停止当前上传、下载和预览。确定继续吗？')) return
+    setAccountMenuOpen(false); screenActive.current = false; transfers.close(); selection.close(); cancelTasks(); props.onLogout()
+  }
   const handleDownload = async (entry: (typeof entries)[number]) => {
     const controller = new AbortController()
     const transferId = crypto.randomUUID()
@@ -1548,11 +1590,81 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
       {drop && <span className="move-drop-label" aria-live="polite">{drop.message}</span>}
     </div>
   }
-  return <main className={`drive-shell${activeView === 'drive' && zipSelections.size > 0 ? ' has-drive-selection' : ''}`}>
-    <aside className="sidebar glass-chrome">
-      <div className="sidebar-brand"><div className="brand-icon"><HardDrive size={18} /></div><strong>XDrive</strong></div>
-      <nav aria-label="主导航"><button className={`nav-item${activeView === 'drive' ? ' is-current' : ''}`} onClick={() => { if (location.pathname !== '/drive') setActiveView('drive'); setActiveTrashRoot(null); setTrashDirectory(null) }}><HardDrive size={17} /> 我的文件</button><button className={`nav-item${activeView === 'trash' ? ' is-current' : ''}`} onClick={() => { setActiveView('trash'); selection.clear(); setActiveTrashRoot(null); setTrashDirectory(null) }}><Trash2 size={17} /> 回收站</button><button className={`nav-item${activeView === 'storage' ? ' is-current' : ''}`} onClick={() => { setActiveView('storage'); selection.clear() }}><HardDrive size={17} /> 存储空间</button><button className={`nav-item${activeView === 'settings' ? ' is-current' : ''}`} onClick={() => { setActiveView('settings'); selection.clear() }}><ShieldCheck size={17} /> 设置</button></nav>
-      <div className="sidebar-bottom"><div className="privacy-status"><span className="status-dot" /> 已解锁 <span className="privacy-caption">本地密钥</span></div>{usage && <div className="storage-meter"><div><span>存储空间</span><span>{formatBytes(usage.usedBytes)} / {formatBytes(usage.quotaBytes)}</span></div><progress max={usage.quotaBytes} value={Math.min(usage.quotaBytes, usage.usedBytes + usage.reservedBytes)} aria-label="已使用存储空间" /><small>回收站 {formatBytes(usage.trashBytes)}</small></div>}</div>
+  const backupOverdue = usage ? backupIsOverdue(usage.lastBackupAt, now, effectiveBackupReminderDays(usage.backupWarnAfterDays, backupReminderDays)) : false
+  const recentTransferResults = transferTasks.filter(task => task.phase === 'completed' || task.phase === 'failed').slice(-5).reverse()
+  const unreadTransferCount = recentTransferResults.filter(task => !readTransferNotifications.has(task.id)).length
+  const notificationCount = Number(Boolean(uploadError || routeError || quotaBlocked)) + Number(backupOverdue) + unreadTransferCount + Number(Boolean(systemUpdateNotice && !systemUpdateNotice.read))
+  const windowTitle = activeView === 'settings' ? '设置' : activeView === 'storage' ? '存储空间' : activeView === 'trash' ? '回收站' : directory.path.at(-1)?.name ?? '我的文件'
+  const beginWindowDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (windowMaximized || window.matchMedia('(max-width: 760px)').matches || event.button !== 0 || (event.target as HTMLElement).closest('button')) return
+    const rect = windowRef.current?.getBoundingClientRect()
+    if (!rect) return
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setWindowRect({ left: rect.left, top: rect.top, width: rect.width, height: rect.height })
+    setDragStart({ pointerId: event.pointerId, x: event.clientX, y: event.clientY, left: rect.left, top: rect.top })
+  }
+  const moveWindow = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragStart || dragStart.pointerId !== event.pointerId) return
+    const width = windowRef.current?.getBoundingClientRect().width ?? 900
+    const left = Math.max(12, Math.min(window.innerWidth - Math.min(width, 240), dragStart.left + event.clientX - dragStart.x))
+    const top = Math.max(54, Math.min(window.innerHeight - 70, dragStart.top + event.clientY - dragStart.y))
+    setWindowRect(current => ({ left, top, width: current?.width ?? width, height: current?.height ?? windowRef.current?.getBoundingClientRect().height ?? 640 }))
+  }
+  const endWindowDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (dragStart?.pointerId === event.pointerId) { event.currentTarget.releasePointerCapture(event.pointerId); setDragStart(null) }
+  }
+  const toggleWindowMaximized = () => {
+    if (!windowMaximized) {
+      const rect = windowRef.current?.getBoundingClientRect()
+      if (rect) setWindowRect({ left: rect.left, top: rect.top, width: rect.width, height: rect.height })
+      setWindowMaximized(true)
+    } else setWindowMaximized(false)
+  }
+
+  return <main className={`desktop-shell${activeView === 'drive' && zipSelections.size > 0 ? ' has-drive-selection' : ''}`}>
+    <header className="desktop-topbar">
+      <button type="button" className="desktop-brand" onClick={() => setWindowOpen(false)} aria-label="显示桌面"><span className="brand-icon"><HardDrive size={19} /></span><strong>XDrive</strong></button>
+      <div className="desktop-topbar-actions">
+        <div className="desktop-notifications-anchor">
+          <button type="button" className="desktop-topbar-button" aria-label={`通知${notificationCount ? `，${notificationCount} 条待处理` : ''}`} aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(value => !value); setReadTransferNotifications(current => new Set([...current, ...recentTransferResults.map(task => task.id)])); setSystemUpdateNotice(current => current ? { ...current, read: true } : null); setAccountMenuOpen(false) }}><Bell size={19} />{notificationCount > 0 && <span className="desktop-badge">{notificationCount > 9 ? '9+' : notificationCount}</span>}</button>
+          {notificationsOpen && <section className="desktop-popover notification-popover" aria-label="通知中心">
+            <header><div><strong>通知</strong><span>{notificationCount ? `${notificationCount} 条待处理` : '当前没有待处理通知'}</span></div><button type="button" className="popover-close" aria-label="关闭通知" onClick={() => setNotificationsOpen(false)}><X size={17} /></button></header>
+            <div className="notification-list">
+              {uploadError && <article><span className="notification-mark is-error" /><div><strong>操作未完成</strong><p>{uploadError}</p>{uploadRequestId && <RequestIdControl requestId={uploadRequestId} />}<button type="button" onClick={() => setUploadError('')}>清除通知</button></div></article>}
+              {routeError && <article><span className="notification-mark is-error" /><div><strong>文件夹无法读取</strong><p>{routeError}</p>{routeRequestId && <RequestIdControl requestId={routeRequestId} />}<button type="button" onClick={() => { setRouteError(''); setActiveView('drive') }}>打开我的文件</button></div></article>}
+              {recentTransferResults.map(task => <article key={task.id}><span className={`notification-mark${task.phase === 'failed' ? ' is-error' : ''}`} /><div><strong>{task.phase === 'failed' ? '传输失败' : '传输完成'}</strong><p>{task.name}{task.detail ? ` · ${task.detail}` : ''}</p></div></article>)}
+              {systemUpdateNotice && <article><span className={`notification-mark${systemUpdateNotice.isError ? ' is-error' : ''}`} /><div><strong>{systemUpdateNotice.isError ? '软件更新异常' : '软件更新'}</strong><p>{systemUpdateNotice.message}</p><button type="button" onClick={() => setActiveView('settings')}>打开更新设置</button></div></article>}
+              {quotaBlocked && <article><span className="notification-mark is-warning" /><div><strong>存储空间不足</strong><p>清理回收站后可重新检查上传。</p><button type="button" onClick={() => setActiveView('trash')}>打开回收站</button><button type="button" onClick={() => setQuotaBlocked(false)}>清除通知</button></div></article>}
+              {backupOverdue && <article><span className="notification-mark is-warning" /><div><strong>需要备份</strong><p>{usage?.lastBackupAt === null ? '尚无已完成的备份。' : '上次备份已超过提醒期限。'}请将备份保存到 VPS 以外的位置。</p><button type="button" onClick={() => setActiveView('settings')}>打开备份设置</button></div></article>}
+              {notificationCount === 0 && recentTransferResults.length === 0 && !systemUpdateNotice && <p className="notifications-empty">文件操作结果和备份提醒会显示在这里。</p>}
+            </div>
+          </section>}
+        </div>
+        <div className="desktop-account-anchor">
+          <button type="button" className="desktop-account-button" aria-expanded={accountMenuOpen} onClick={() => { setAccountMenuOpen(value => !value); setNotificationsOpen(false) }}><span className="account-avatar"><UserRound size={18} /></span><span>{props.vault.username}</span><ChevronDown size={15} /></button>
+          {accountMenuOpen && <div className="desktop-popover account-popover" role="menu" aria-label="个人账号">
+            <div className="account-menu-heading"><strong>{props.vault.username}</strong><span>已解锁 · 密钥保存在此浏览器</span></div>
+            <button role="menuitem" type="button" onClick={() => { setAccountMenuOpen(false); setChangePasswordOpen(true) }}><ShieldCheck size={16} /> 修改密码</button>
+            <button role="menuitem" type="button" onClick={lockAndCancel}><LockKeyhole size={16} /> 锁定云盘</button>
+            <button role="menuitem" type="button" className="is-danger" onClick={logoutAndCancel}><LogOut size={16} /> 退出登录</button>
+          </div>}
+        </div>
+      </div>
+    </header>
+    <nav className="desktop-icons" aria-label="桌面应用">
+      <button type="button" className={activeView === 'drive' && windowOpen ? 'is-active' : ''} onClick={() => setActiveView('drive')}><span className="desktop-app-icon is-files"><Folder size={28} /></span><span>我的文件</span></button>
+      <button type="button" className={activeView === 'trash' && windowOpen ? 'is-active' : ''} onClick={() => { selection.clear(); setActiveTrashRoot(null); setTrashDirectory(null); setActiveView('trash') }}><span className="desktop-app-icon is-trash"><Trash2 size={26} /></span><span>回收站</span></button>
+      <button type="button" className={activeView === 'settings' && windowOpen ? 'is-active' : ''} onClick={() => { selection.clear(); setActiveView('settings') }}><span className="desktop-app-icon is-settings"><Settings size={27} /></span><span>设置</span></button>
+    </nav>
+    <div ref={windowRef} hidden={!windowOpen || windowMinimized} className={`app-window${windowMaximized ? ' is-maximized' : ''}${activeView === 'drive' ? '' : ' is-system-window'}`} style={!windowMaximized && windowRect ? { left: windowRect.left, top: windowRect.top, width: windowRect.width, height: windowRect.height } : undefined}>
+      <div className="app-window-titlebar" onPointerDown={beginWindowDrag} onPointerMove={moveWindow} onPointerUp={endWindowDrag} onPointerCancel={endWindowDrag} onDoubleClick={event => { if (!(event.target as HTMLElement).closest('button')) toggleWindowMaximized() }}>
+        <div className="app-window-title"><span className="app-window-mark"><HardDrive size={17} /></span><strong>{windowTitle}</strong><span className="app-window-brand">XDrive</span></div>
+        <div className="app-window-controls"><button type="button" aria-label="最小化窗口" onClick={() => setWindowMinimized(true)}><Minimize2 size={15} /></button><button type="button" aria-label={windowMaximized ? '还原窗口' : '最大化窗口'} onClick={toggleWindowMaximized}>{windowMaximized ? <Minimize2 size={15} /> : <Maximize2 size={15} />}</button><button type="button" aria-label="关闭窗口" onClick={() => { setWindowOpen(false); setMobileTreeOpen(false); if (preview) closePreview() }}><X size={17} /></button></div>
+      </div>
+      <div className="app-window-body">
+    <aside className={`sidebar glass-chrome${mobileTreeOpen ? ' is-mobile-open' : ''}`}>
+      {activeView === 'drive' ? <><FolderTree vault={props.vault} currentIndexId={directory.indexId} currentPath={directory.path} onNavigate={navigateTree} />
+      <div className="sidebar-bottom"><div className="privacy-status"><span className="status-dot" /> 已解锁 <span className="privacy-caption">本地密钥</span></div>{usage && <button className="storage-meter" type="button" onClick={() => setActiveView('storage')} aria-label="打开存储空间设置"><div><span>存储空间</span><span>{formatBytes(usage.usedBytes)} / {formatBytes(usage.quotaBytes)}</span></div><progress max={usage.quotaBytes} value={Math.min(usage.quotaBytes, usage.usedBytes + usage.reservedBytes)} aria-label="已使用存储空间" /><small>回收站 {formatBytes(usage.trashBytes)}</small></button>}</div></> : <div className="sidebar-shortcuts"><span>应用</span><button type="button" onClick={() => setActiveView('drive')}><Folder size={16} /> 我的文件</button><button type="button" onClick={() => setActiveView('trash')}><Trash2 size={16} /> 回收站</button><button type="button" onClick={() => setActiveView('settings')}><Settings size={16} /> 设置</button></div>}
     </aside>
     <section className="drive-main"
       onDragEnter={event => {
@@ -1591,14 +1703,14 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
       {externalDropActive && activeView === 'drive' && <div className="folder-drop-overlay" role="status" aria-live="polite">放开以加密上传文件或文件夹</div>}
       {writerState !== 'locks' && <div className="form-notice" role="status">{writerState === 'fallback-writer' ? '此浏览器不支持标签页锁：当前标签页负责写入，其他标签页只读。' : writerState === 'unavailable' ? '无法验证标签页写入登记，已暂停修改。请检查浏览器本地存储权限。' : '此标签页只读。请先关闭其他 XDrive 标签页；若上次写入标签页异常退出，可重新接管。'}{writerState === 'fallback-reader' && <button className="quiet-button" type="button" onClick={() => { if (window.confirm('请确认其他 XDrive 标签页已关闭。接管后，旧标签页将失去写入权限。')) void browserMutations.prepare(props.vault.rootIndexId, true).catch(() => undefined) }}>关闭其他标签页后接管写入</button>}</div>}
       <header className="drive-toolbar glass-chrome">
+        {activeView === 'drive' && <button type="button" className="folder-tree-toggle" aria-expanded={mobileTreeOpen} aria-label="切换文件夹目录" onClick={() => setMobileTreeOpen(value => !value)}><Folder size={17} /> 文件夹</button>}
         <div className={`toolbar-path${activeView === 'drive' ? '' : ' breadcrumbs'}`}>{activeView === 'settings' ? <span>设置</span> : activeView === 'storage' ? <span>存储空间</span> : activeView === 'drive' ? <Breadcrumbs count={folderLoading ? undefined : entries.length} items={[{ id: props.vault.rootIndexId, name: "我的文件", onSelect: () => void navigateTo(-1) }, ...directory.path.map((crumb, index) => ({ id: directory.path[index + 1]?.indexId ?? directory.indexId, name: crumb.name, onSelect: () => void navigateTo(index + 1) }))]} /> : <Breadcrumbs label="回收站路径" count={activeTrashRoot && trashDirectory && !folderLoading ? trashDirectory.entries.length : undefined} items={[{ id: 'trash-root', name: '回收站', onSelect: resetTrashPath }, ...(activeTrashRoot ? [{ id: activeTrashRoot.item.childIndexId ?? activeTrashRoot.tombstoneId, name: activeTrashRoot.item.name, onSelect: () => void openTrashFolder(activeTrashRoot) }, ...(trashDirectory?.path ?? []).map((crumb, index) => ({ id: trashDirectory?.path[index + 1]?.indexId ?? trashDirectory!.indexId, name: crumb.name, onSelect: () => void readTrashDirectory(activeTrashRoot, trashDirectory!.path[index + 1]?.indexId ?? trashDirectory!.indexId, trashDirectory!.path.slice(0, index + 1)) }))] : [])]} />}</div>
-        <div className="toolbar-actions">{activeView === 'drive' ? <><button className="toolbar-button" onClick={() => void handleCreateFolder()} disabled={writeBlocked || uploading || folderLoading}><FolderPlus size={16} /> 新建文件夹</button><button className="toolbar-button" onClick={() => void handleDownloadFolderZip()} disabled={uploading || folderLoading || !!zipController || entries.length === 0}><Archive size={16} /> 下载为 ZIP</button><button className="toolbar-button" onClick={selectFolder} disabled={writeBlocked || uploading || folderLoading}><Folder size={16} /> 上传文件夹</button><button className="toolbar-button" onClick={selectFile} disabled={writeBlocked || uploading || folderLoading}><ArrowUpFromLine size={16} /> 上传</button></> : activeView === 'trash' && activeTrashRoot && <><button className="toolbar-button" disabled={writeBlocked || clearingTrash || uploading} onClick={() => void handleRestore(activeTrashRoot)}><RotateCcw size={16} /> 恢复</button><button className="toolbar-button is-danger" disabled={writeBlocked || clearingTrash || uploading} onClick={() => void handlePurge(activeTrashRoot)}><Trash2 size={16} /> 永久删除</button></>}{activeView !== 'settings' && <button className="toolbar-button" onClick={() => setChangePasswordOpen(true)} disabled={writeBlocked || uploading}><ShieldCheck size={16} /> 修改密码</button>}<button className="icon-button" aria-label="锁定云盘" onClick={lockAndCancel}><LockKeyhole size={17} /></button><button className="icon-button" aria-label="退出登录" onClick={logoutAndCancel}><LogOut size={17} /></button></div>
+        <div className="toolbar-actions">{activeView === 'drive' ? <><button className="toolbar-button" onClick={() => void handleCreateFolder()} disabled={writeBlocked || uploading || folderLoading}><FolderPlus size={16} /> 新建文件夹</button><button className="toolbar-button" onClick={() => void handleDownloadFolderZip()} disabled={uploading || folderLoading || !!zipController || entries.length === 0}><Archive size={16} /> 下载为 ZIP</button><button className="toolbar-button" onClick={selectFolder} disabled={writeBlocked || uploading || folderLoading}><Folder size={16} /> 上传文件夹</button><button className="toolbar-button" onClick={selectFile} disabled={writeBlocked || uploading || folderLoading}><ArrowUpFromLine size={16} /> 上传</button></> : activeView === 'trash' && activeTrashRoot && <><button className="toolbar-button" disabled={writeBlocked || clearingTrash || uploading} onClick={() => void handleRestore(activeTrashRoot)}><RotateCcw size={16} /> 恢复</button><button className="toolbar-button is-danger" disabled={writeBlocked || clearingTrash || uploading} onClick={() => void handlePurge(activeTrashRoot)}><Trash2 size={16} /> 永久删除</button></>}</div>
       {activeView === 'drive' && <div className="view-controls" role="group" aria-label="视图与排序"><button type="button" aria-label="网格视图" aria-pressed={view === 'grid'} onClick={() => setPreferences({ view: 'grid' })}><LayoutGrid size={16} /></button><button type="button" aria-label="列表视图" aria-pressed={view === 'list'} onClick={() => setPreferences({ view: 'list' })}><List size={16} /></button><button type="button" disabled={entries.length === 0} onClick={selectAll}>全选当前文件夹</button><label htmlFor="sort-by">排序</label><select id="sort-by" aria-label="排序字段" value={sortBy} onChange={event => setSortBy(event.target.value as SortBy)}><option value="name">名称</option><option value="modified">原始修改时间</option><option value="size">大小</option><option value="type">文件类型</option></select><button type="button" aria-label={descending ? '切换为升序' : '切换为降序'} onClick={() => setDescending(value => !value)}>{descending ? '降序 ↓' : '升序 ↑'}</button></div>}
       </header>
       <input ref={fileInput} type="file" hidden multiple onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; const restart = expiredRestart; setExpiredRestart(null); if (restart) void handleRestartExpiredUpload(restart, files[0]); else if (files.length > 1) void handleFolder(files, 'files'); else void handleFile(files[0]) }} />
       <input ref={resumeInput} type="file" hidden onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void handleResume(file) }} />
       <input ref={folderInput} type="file" hidden multiple onChange={(event) => { const files = Array.from(event.currentTarget.files ?? []); event.currentTarget.value = ''; if (files.length === 0) { setUploadMessage(''); setUploadError('浏览器没有返回可上传的文件；空文件夹不会上传。'); return }; void handleFolder(files) }} />
-      {usage && <BackupNotice usage={usage} now={now} browserDays={backupReminderDays} />}
       {(uploadMessage || uploadError || routeError) && <div className={uploadError || routeError ? 'upload-status is-error' : 'upload-status'} role={uploadError || routeError ? 'alert' : 'status'}>
         {uploadMessage && <span>{uploadMessage}{uploadProgress.total > 0 && ` · ${Math.round(uploadProgress.complete / uploadProgress.total * 100)}%`}</span>}
         {uploadError && <span>{uploadError}<RequestIdControl requestId={uploadRequestId} /></span>}
@@ -1607,7 +1719,8 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
         {activeView === 'drive' && (uploadError || routeError) && <button type="button" onClick={() => setRouteAttempt(attempt => attempt + 1)}>重新读取目录</button>}
         {quotaBlocked && <button type="button" onClick={() => { setActiveView('trash'); setActiveTrashRoot(null); setTrashDirectory(null) }}>前往回收站清理</button>}
       </div>}
-      {activeView === 'settings' ? <Suspense fallback={<p role="status">正在载入设置…</p>}><SettingsScreen now={now} revision={props.vault.vaultMutationRevision} onChangePassword={() => setChangePasswordOpen(true)} passwordDisabled={writeBlocked || uploading} /></Suspense> : activeView === 'storage' ? <StorageScreen now={now} revision={props.vault.vaultMutationRevision} formatBytes={formatBytes} onClearTrash={requestClearTrash} clearDisabled={writeBlocked || uploading || clearingTrash || props.vault.trashEntries.length === 0} onTrash={() => { setActiveView('trash'); setActiveTrashRoot(null); setTrashDirectory(null) }} /> : activeView === 'drive' ? <>
+      <div hidden={activeView !== 'settings'} className="settings-window-content"><Suspense fallback={<p role="status">正在载入设置…</p>}><SettingsScreen now={now} revision={props.vault.vaultMutationRevision} onChangePassword={() => setChangePasswordOpen(true)} passwordDisabled={writeBlocked || uploading} active={activeView === 'settings'} onUpdateNotice={publishUpdateNotice} onOpenStorage={() => setActiveView('storage')} /></Suspense></div>
+      {activeView === 'settings' ? null : activeView === 'storage' ? <StorageScreen now={now} revision={props.vault.vaultMutationRevision} formatBytes={formatBytes} onClearTrash={requestClearTrash} clearDisabled={writeBlocked || uploading || clearingTrash || props.vault.trashEntries.length === 0} onTrash={() => { setActiveView('trash'); setActiveTrashRoot(null); setTrashDirectory(null) }} /> : activeView === 'drive' ? <>
         <div className="content-heading"><div><p className="eyebrow">已解锁空间</p><h1>{folderLoading ? '正在读取文件夹…' : directory.path.at(-1)?.name ?? '我的文件'}</h1></div><p className="item-count">{entries.length} 项</p></div>
 
         {folderLoading ? <p role={uploadMessage && !uploadError ? undefined : 'status'} aria-live="polite">正在读取文件夹…</p> : <>{activeView === 'drive' && zipSelections.size > 0 && <div className="batch-actions drive-batch-actions" role="toolbar" aria-label="批量操作"><span>已选 {zipSelections.size} 项</span><button type="button" disabled={uploading || folderLoading || !!zipController} onClick={() => void handleDownloadFolderZip(true)}>下载所选为 ZIP</button><button type="button" disabled={writeBlocked || uploading || folderLoading} onClick={() => setMovingSelections([...zipSelections.values()])}>批量移动</button><button type="button" disabled={writeBlocked || uploading || folderLoading} onClick={requestDeleteSelection}>移到回收站所选</button><button type="button" onClick={() => { selection.clear() }}>取消选择</button></div>}{entries.length === 0 ? <div className="empty-state"><div className="empty-icon"><Folder size={26} /></div><h2>{folderLoading ? '正在读取文件夹…' : '这里还没有文件'}</h2><p>文件在浏览器中加密后才会上传到服务器。</p><button className="primary-button" onClick={selectFile} disabled={writeBlocked || uploading || folderLoading}><ArrowUpFromLine size={16} /> 上传文件</button></div> : view === 'grid' ? <VirtualEntryGrid key={directory.indexId} entries={entries} itemKey={entry => entry.entryId} renderEntry={entry => {
@@ -1624,6 +1737,10 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
         }} /> : <><DriveListHeader sortBy={sortBy} descending={descending} onSort={sortFromListHeader} /><VirtualEntryList key={directory.indexId} entries={entries} itemKey={(entry) => entry.entryId} renderEntry={renderDriveListEntry} /></>}</>}
       </> : <TrashView vault={props.vault} writeBlocked={writeBlocked} root={activeTrashRoot} directory={trashDirectory} loading={folderLoading} onClear={requestClearTrash} selected={trashSelected} onSelected={setTrashSelected} onRestoreSelected={() => void restoreRoots([...trashSelected])} onPurgeSelected={requestSelectedPurge} clearing={clearingTrash || uploading} onOpenRoot={(item) => void openTrashFolder(item)} onOpenFolder={(entry) => void openTrashChildFolder(entry)} onPreview={(entry) => void handlePreview(entry)} onDownload={(entry) => void handleDownload(entry)} onRestore={(item) => void handleRestore(item)} onPurge={(item) => void handlePurge(item)} />}
     </section>
+      </div>
+    </div>
+    {windowMinimized && windowOpen && <button className="desktop-taskbar-item" type="button" onClick={() => setWindowMinimized(false)}><HardDrive size={16} />{windowTitle}</button>}
+    {!windowOpen && <div className="desktop-hint">选择桌面上的应用以打开 XDrive</div>}
     {actionsEntry && <EntryActionsDialog entry={actionsEntry} parent={directory.path.length > 0} writeBlocked={writeBlocked || uploading} returnFocus={actionsTrigger} onClose={() => setActionsEntry(null)} onAction={(action: EntryAction) => {
       const entry = actionsEntry; setActionsEntry(null)
       if (action === 'rename') void handleRename(entry.entryId)

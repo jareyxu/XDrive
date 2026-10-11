@@ -1,7 +1,13 @@
-.page { margin: 0 auto; max-width: 920px; padding: 0 32px 32px; background: var(--surface-grouped); }
+.page { margin: 0 auto; max-width: 1180px; padding: 0 24px 28px; background: var(--surface-grouped); }
 .page :global(.eyebrow) { color: var(--label-2); }
 .page :global(.content-heading) { padding: 0; }
+.settingsLayout { display: grid; grid-template-columns: 142px minmax(0, 1fr); align-items: start; gap: 18px; }
+.categoryNav { position: sticky; top: 12px; display: grid; gap: 4px; padding: 8px; border: 1px solid var(--separator); border-radius: var(--radius-card); background: var(--surface-content); }
+.categoryNav button { min-height: 38px; padding: 0 10px; border-radius: 8px; background: transparent; color: var(--label-2); text-align: left; font-size: 12px; }
+.categoryNav button:hover, .categoryNav button[aria-current="location"] { background: color-mix(in srgb, var(--accent) 11%, transparent); color: var(--accent); }
+.settingsGroups { min-width: 0; }
 .group { margin: 20px 0; padding: 18px 22px; border: 1px solid var(--separator); border-radius: var(--radius-card); background: var(--surface-content); }
+.group h2 { scroll-margin-top: 16px; }
 .group h2 { margin: 0 0 12px; font-size: 17px; }
 .row { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 14px 0; border-top: 1px solid var(--separator); }
 .row small, .help { display: block; color: var(--label-2); font-size: 13px; line-height: 1.6; margin: 5px 0 0; }
@@ -30,5 +36,5 @@
 .releaseDetails { margin-top: 12px; border-top: 1px solid var(--separator); padding-top: 12px; }
 .releaseDetails summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; color: var(--accent); }
 .releaseDetails pre { max-height: 280px; overflow: auto; margin: 8px 0 0; padding: 12px; border-radius: var(--radius-control); background: var(--fill-2); font: inherit; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-@media(max-width:760px) { .page { padding: 0 18px 24px; } .group { padding: 16px; } .row { flex-wrap: wrap; } .segment { width: 100%; } .segment button { flex: 1; } }
+@media(max-width:760px) { .page { padding: 0 14px 24px; } .settingsLayout { display: block; } .categoryNav { position: sticky; z-index: 2; top: 0; display: flex; overflow-x: auto; margin: 0 -4px; padding: 5px; border-radius: 10px; scrollbar-width: thin; } .categoryNav button { min-width: max-content; min-height: 40px; } .group { padding: 16px; } .row { flex-wrap: wrap; } .segment { width: 100%; } .segment button { flex: 1; } }
 @media(forced-colors:active) { .segment button[aria-pressed="true"] { border-color: Highlight; } .preview { background: Canvas; } .preview span, .group, .warning { border: 1px solid CanvasText; } }

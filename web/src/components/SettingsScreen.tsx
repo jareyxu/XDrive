@@ -6,7 +6,8 @@ import { APIError } from '../api/api-error'
 import { effectiveBackupReminderDays, backupIsOverdue, setPreferences, usePreferences } from '../preferences/preferences'
 import styles from './SettingsScreen.module.css'
 
-export function SettingsScreen(props: { now: number; revision: number; onChangePassword: () => void; passwordDisabled: boolean }) {
+export function SettingsScreen(props: { now: number; revision: number; onChangePassword: () => void; passwordDisabled: boolean; active?: boolean; onUpdateNotice?: (message: string, isError: boolean) => void; onOpenStorage?: () => void }) {
+  const onUpdateNotice = props.onUpdateNotice
   const preferences = usePreferences()
   const [usage, setUsage] = useState<StorageUsage | null>(null)
   const [info, setInfo] = useState<SystemInfo | null>(null)
@@ -23,7 +24,9 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
   const [backupMessage, setBackupMessage] = useState('')
   const [backupError, setBackupError] = useState('')
   const [backupErrorRequestId, setBackupErrorRequestId] = useState<string | undefined>()
+  const [activeCategory, setActiveCategory] = useState('appearance')
   useEffect(() => {
+    if (props.active === false) return
     const controller = new AbortController()
     let live = true
     queueMicrotask(() => {
@@ -40,7 +43,7 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
       })
     })
     return () => { live = false; controller.abort() }
-  }, [props.revision, refresh, setError])
+  }, [props.active, props.revision, refresh, setError])
   useEffect(() => {
     const requestId = updateStatus?.id
     if (!requestId || updateStatus.state === 'succeeded' || updateStatus.state === 'failed') return
@@ -53,16 +56,18 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
         if (controller.signal.aborted) return
         setUpdateStatus(status)
         if (status.state === 'succeeded') {
+          onUpdateNotice?.('更新完成。刷新页面后载入新版本。', false)
           setConfirmUpdate(false)
           void Promise.all([fetchSystemInfo(), fetchSystemUpdateInfo()]).then(([build, release]) => { setInfo(build); setUpdateInfo(release) }).catch(() => undefined)
           return
         }
-        if (status.state === 'failed') return
+        if (status.state === 'failed') { onUpdateNotice?.('更新失败。请查看服务器更新服务日志。', true); return }
       } catch {
         if (controller.signal.aborted) return
         attempts += 1
         if (attempts > 120) {
           setUpdateError('更新状态暂时无法读取。请检查服务器上的 xdrive-web-update.service 日志。')
+          onUpdateNotice?.('更新状态暂时无法读取，请检查服务器更新服务日志。', true)
           return
         }
       }
@@ -70,7 +75,7 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
     }
     void poll()
     return () => { controller.abort(); window.clearTimeout(timer) }
-  }, [updateStatus?.id, updateStatus?.state])
+  }, [updateStatus?.id, updateStatus?.state, onUpdateNotice])
   const reminderDays = usage ? effectiveBackupReminderDays(usage.backupWarnAfterDays, preferences.backupReminderDays) : null
   const expired = usage && backupIsOverdue(usage.lastBackupAt, props.now, reminderDays!)
   const checkForUpdates = async () => {
@@ -90,9 +95,12 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
     setUpdateError('')
     setConfirmUpdate(false)
     try {
-      setUpdateStatus(await startSystemUpdate(updateInfo.latestVersion, AbortSignal.timeout(15000)))
+      const status = await startSystemUpdate(updateInfo.latestVersion, AbortSignal.timeout(15000))
+      setUpdateStatus(status)
+      onUpdateNotice?.('已请求安装更新，服务器正在准备更新任务。', false)
     } catch (cause) {
       setUpdateError(cause instanceof APIError ? cause.message : '无法启动更新。请重新检查版本，或查看服务器服务日志。')
+      onUpdateNotice?.('无法启动更新。请重新检查版本，或查看服务器服务日志。', true)
     }
   }
   const beginBackup = async () => {
@@ -118,9 +126,19 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
   }
   const updateStateText = (state: SystemUpdateStatus['state']) => ({ queued: '已排队，等待服务器启动更新任务…', checking: '正在确认正式版信息…', downloading: '正在下载并校验发布包…', installing: '正在安装。XDrive 服务会短暂重启…', succeeded: '更新完成，请刷新页面载入新版界面。', failed: '更新没有完成。' })[state]
   const updateFailureText = (code?: string) => ({ release_check_failed: '服务器无法连接 GitHub；没有更改已安装文件。', release_changed: '正式版在检查后发生变化，请重新检查再试。', version_not_newer: '所选版本已不比当前版本新。', unsupported_architecture: '此服务器架构暂不支持网页更新。', checksum_unavailable: '无法读取正式版校验文件；没有安装该版本。', release_invalid: '正式版信息无效；更新已停止。', upgrade_failed: '更新失败。请查看 xdrive-web-update.service 日志，确认服务恢复状态。' } as Record<string, string>)[code ?? ''] ?? '更新失败；请检查服务器更新服务日志。'
+  const jumpTo = (id: string) => {
+    if (id === 'storage') { props.onOpenStorage?.(); return }
+    setActiveCategory(id)
+    document.getElementById(`${id}-title`)?.scrollIntoView({ block: 'start' })
+  }
   return <section className={styles.page} aria-label="云盘设置">
     <div className="content-heading"><div><p className="eyebrow">此浏览器与账号</p><h1>设置</h1></div></div>
     {!preferences.persistenceAvailable && <p className="form-notice" role="status">浏览器不允许保存偏好。当前设置仍会生效，但刷新后可能恢复默认值。</p>}
+    <div className={styles.settingsLayout}>
+    <nav className={styles.categoryNav} aria-label="设置分类">
+      {([['appearance', '外观'], ['transfer', '传输'], ['storage', '存储空间'], ['security', '安全'], ['backup', '备份'], ['updates', '软件更新'], ['about', '关于']] as const).map(([id, label]) => <button key={id} type="button" aria-current={activeCategory === id ? 'location' : undefined} onClick={() => jumpTo(id)}>{label}</button>)}
+    </nav>
+    <div className={styles.settingsGroups}>
     <section className={styles.group} aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2>
       <div className={styles.row}><span id="theme-label">外观模式</span><div className={styles.segment} role="group" aria-labelledby="theme-label">{([['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={preferences.theme === value} onClick={() => setPreferences({ theme: value })}>{label}</button>)}</div></div>
       <div className={`${styles.row} ${styles.stacked}`}><label htmlFor="glass-clarity">玻璃通透度 · {Math.round(preferences.clarity * 100)}%</label><input id="glass-clarity" type="range" min="0" max="1" step="0.05" value={preferences.clarity} onChange={event => setPreferences({ clarity: Number(event.target.value) })} /><div className={styles.ends}><span>着色</span><span>清透</span></div><div className={styles.preview} aria-label="通透度实时预览"><span className="glass-chrome"><strong className={styles.previewLabel}>XDrive · 实时预览</strong></span></div></div>
@@ -151,6 +169,8 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
       {updateError && <p className="form-error" role="alert">{updateError}</p>}
     </section>
     <section className={styles.group} aria-labelledby="about-title"><h2 id="about-title">关于</h2><dl className={styles.about}><div><dt>应用版本</dt><dd>{info ? info.version === 'dev' ? 'dev（开发构建）' : info.version : busy ? '正在读取…' : '不可用'}</dd></div><div><dt>构建提交</dt><dd>{info?.commit || (busy ? '正在读取…' : '不可用')}</dd></div><div><dt>加密数据格式</dt><dd>{info ? `V${info.encryptedFormatVersion}` : busy ? '正在读取…' : '不可用'}</dd></div></dl></section>
+    </div>
+    </div>
     {error && <div role="alert" className="form-error">{error}<RequestIdControl requestId={errorRequestId} /><button type="button" className="quiet-button" onClick={() => setRefresh(value => value + 1)}>重新读取</button></div>}
   </section>
 }

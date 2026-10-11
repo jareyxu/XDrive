@@ -1,9 +1,10 @@
 .root {
   position: fixed;
-  z-index: 7;
-  right: max(24px, env(safe-area-inset-right));
-  bottom: max(24px, env(safe-area-inset-bottom));
-  width: min(360px, calc(100vw - 32px));
+  z-index: 32;
+  top: 2px;
+  right: 218px;
+  bottom: auto;
+  width: 180px;
   color: var(--label-1);
   font-size: 12px;
 }
@@ -13,6 +14,7 @@
   min-height: 46px;
   align-items: center;
   gap: 10px;
+  width: 100%;
   margin-left: auto;
   padding: 0 14px;
   border: 1px solid var(--separator);
@@ -32,7 +34,8 @@
 .panel {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 10px);
+  top: calc(100% + 7px);
+  bottom: auto;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   width: 100%;
@@ -74,9 +77,9 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 760px) {
-  .root { right: max(10px, env(safe-area-inset-right)); bottom: calc(72px + env(safe-area-inset-bottom)); width: min(100vw - 20px, 480px); }
-  .pill { min-height: 44px; }
-  .panel { position: fixed; right: 0; bottom: calc(62px + env(safe-area-inset-bottom)); left: 0; width: 100%; max-height: min(72dvh, 640px); border-radius: 20px 20px 0 0; padding-bottom: env(safe-area-inset-bottom); }
+  .root { top: 2px; right: 116px; bottom: auto; width: 132px; }
+  .pill { min-height: 44px; gap: 5px; padding: 0 7px; font-size: 10px; }
+  .panel { position: fixed; top: 54px; right: 8px; bottom: auto; left: auto; width: min(360px, calc(100vw - 16px)); max-height: min(72dvh, 640px); border-radius: 16px; padding-bottom: env(safe-area-inset-bottom); }
   .header, .item, .reservation, .footer { padding-right: 18px; padding-left: 18px; }
   .close, .action, .quietAction { min-width: 44px; min-height: 44px; }
 }

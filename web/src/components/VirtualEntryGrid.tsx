@@ -9,6 +9,7 @@ export function VirtualEntryGrid<T>({ entries, itemKey, renderEntry }: Props<T>)
   'use no memo'
   const viewport = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(800)
+  const [availableHeight, setAvailableHeight] = useState(480)
   const [compact, setCompact] = useState(() => typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches)
   const [focused, setFocused] = useState(() => entries[0] ? itemKey(entries[0]) : '')
   const index = Math.max(0, entries.findIndex(entry => itemKey(entry) === focused))
@@ -22,9 +23,15 @@ export function VirtualEntryGrid<T>({ entries, itemKey, renderEntry }: Props<T>)
     const query = matchMedia('(max-width: 760px)')
     const update = () => setCompact(query.matches)
     query.addEventListener('change', update)
-    const measureWidth = () => { const next = viewport.current?.clientWidth ?? 0; if (next > 0) setWidth(next) }
-    const observer = new ResizeObserver(measureWidth)
-    if (viewport.current) { measureWidth(); observer.observe(viewport.current) }
+    const measure = () => {
+      const element = viewport.current
+      const next = element?.clientWidth ?? 0
+      if (next > 0) setWidth(next)
+      const main = element?.closest<HTMLElement>('.drive-main')
+      if (main && element) setAvailableHeight(Math.max(180, Math.floor(main.getBoundingClientRect().bottom - element.getBoundingClientRect().top - 18)))
+    }
+    const observer = new ResizeObserver(measure)
+    if (viewport.current) { measure(); observer.observe(viewport.current); const main = viewport.current.closest<HTMLElement>('.drive-main'); if (main) observer.observe(main) }
     return () => { observer.disconnect(); query.removeEventListener('change', update) }
   }, [])
   const rangeExtractor = useCallback((range: Parameters<typeof defaultRangeExtractor>[0]) => {
@@ -47,7 +54,7 @@ export function VirtualEntryGrid<T>({ entries, itemKey, renderEntry }: Props<T>)
     if (frame.current !== null) cancelAnimationFrame(frame.current)
     frame.current = requestAnimationFrame(() => { frame.current = null; viewport.current?.querySelector<HTMLElement>(`[data-grid-index="${next}"]`)?.focus({ preventScroll: true }) })
   }
-  return <div ref={viewport} className={styles.viewport} role="list" aria-label="文件网格" data-columns={columns} style={{ height: `min(${Math.max(rowHeight, count * rowHeight)}px, max(180px, calc(100dvh - 300px)))` }} onKeyDown={navigate} onFocusCapture={event => {
+  return <div ref={viewport} className={styles.viewport} role="list" aria-label="文件网格" data-columns={columns} style={{ height: `min(${Math.max(rowHeight, count * rowHeight)}px, ${availableHeight}px)` }} onKeyDown={navigate} onFocusCapture={event => {
     const card = (event.target as HTMLElement).closest<HTMLElement>('[data-grid-index]')
     if (card) setFocused(itemKey(entries[Number(card.dataset.gridIndex)]!))
   }}>

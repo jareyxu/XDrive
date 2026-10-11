@@ -2,17 +2,18 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v1.3.7",
-    "reviewedAt": "2026-10-10",
-    "reviewer": "Release deployment explicitly authorized by the user in the project conversation; automated implementation evidence recorded locally and required in Linux CI",
+    "version": "v2.0.0",
+    "reviewedAt": "2026-10-11",
+    "reviewer": "Release gate review following the user-authorized v2.0.0 publication request; format contracts checked against the unchanged matrix",
     "evidence": [
-      "The user requested deploying the extensible update fix. v1.3.7 is the first immutable legacy updater bridge; future releases retain its verified five-member compatibility envelope while current workers choose complete manifest-driven packages.",
-      "This change preserves the previously approved encrypted object, key derivation, AAD, metadata, SQLite, backup, and client mutation contracts. It adds release package format 1 and a controlled application-file installation boundary.",
-      "Go regression and race checks, portable installation/upgrade checks, variable-file package tests, twenty-resource deployment, removal of obsolete managed files, full directory/database rollback, administrator-file preservation, and interrupted directory-switch recovery passed locally. Both Linux architectures packaged successfully and all four candidate archive digests and manifests were verified.",
-      "Publication requires successful exact-commit main CI on Ubuntu, including project checks, all-package race tests and Linux cross-builds. An actual systemd two-stage legacy-to-future update rehearsal was not executed locally; that limitation remains recorded for target VPS rollout."
+      "This release changes the browser desktop shell and navigation UI. Encrypted object, key derivation, AAD, directory, trash, manifest, backup, SQLite, and client mutation contracts remain unchanged from v1.3.7.",
+      "Local make test passed with Go 1.27.1, Node 26.0.0, and pnpm 11.24.0, including frontend typecheck/lint/build, Go tests, installer/update tests, 533 web tests, and 3 TLS proxy tests.",
+      "Local go test -race -count=1 ./... passed on macOS arm64.",
+      "Publication remains gated on successful exact-commit main CI on Ubuntu 24.04, including all-package race checks and Linux amd64/arm64 cross-builds; the release workflow builds and checksum-publishes both architectures.",
+      "Manual browser screenshot and mobile-device visual QA were not performed and are not claimed as verified."
     ]
   },
-  "scope": "XDrive V1.3.7 extensible manifest-driven release packages, complete application-directory rollback, and immutable legacy updater bridge; persistent data contracts unchanged from V1.3.6",
+  "scope": "XDrive v2.0.0 desktop shell and settings UI redesign; persistent data, cryptographic, SQLite, backup, and client mutation contracts unchanged from v1.3.7",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,
