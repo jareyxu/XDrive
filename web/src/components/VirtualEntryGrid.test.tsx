@@ -29,9 +29,10 @@ test('End/Home reach unmounted cards and arrows follow the grid columns', async 
  fireEvent.keyDown(document.activeElement!, { key: 'Home' })
  await waitFor(() => expect(document.activeElement?.getAttribute('aria-posinset')).toBe('1'))
 })
-test('compact grid stays three columns and checkbox navigation remains native', () => {
+test('compact grid fits two readable columns at phone width and checkbox navigation remains native', () => {
  vi.stubGlobal('matchMedia', () => ({ matches: true, addEventListener() {}, removeEventListener() {} }))
- const view = grid(); expect(view.getByRole('list').dataset.columns).toBe('3')
+ for (const key of ['offsetWidth', 'clientWidth']) Object.defineProperty(HTMLElement.prototype, key, { configurable: true, get: () => 340 })
+ const view = grid(); expect(view.getByRole('list').dataset.columns).toBe('2')
  const event = new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true })
  view.getByRole('checkbox', { name: 'select-file-0' }).dispatchEvent(event); expect(event.defaultPrevented).toBe(false)
 })

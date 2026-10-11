@@ -14,9 +14,8 @@ export function VirtualEntryGrid<T>({ entries, itemKey, renderEntry }: Props<T>)
   const [focused, setFocused] = useState(() => entries[0] ? itemKey(entries[0]) : '')
   const index = Math.max(0, entries.findIndex(entry => itemKey(entry) === focused))
   const gap = compact ? 8 : 16
-  const columns = compact ? 3 : Math.max(1, Math.floor((width + gap) / (148 + gap)))
-  const cardWidth = (width - (columns - 1) * gap) / columns
-  const rowHeight = cardWidth + 70 + gap
+  const columns = Math.max(1, Math.floor((width + gap) / ((compact ? 126 : 174) + gap)))
+  const rowHeight = (compact ? 182 : 214) + gap
   const count = Math.ceil(entries.length / columns)
   const focusRow = Math.floor(index / columns)
   useLayoutEffect(() => {
@@ -28,7 +27,7 @@ export function VirtualEntryGrid<T>({ entries, itemKey, renderEntry }: Props<T>)
       const next = element?.clientWidth ?? 0
       if (next > 0) setWidth(next)
       const main = element?.closest<HTMLElement>('.drive-main')
-      if (main && element) setAvailableHeight(Math.max(180, Math.floor(main.getBoundingClientRect().bottom - element.getBoundingClientRect().top - 18)))
+      if (main && element) setAvailableHeight(Math.max(180, Math.floor(main.getBoundingClientRect().bottom - element.getBoundingClientRect().top - 24)))
     }
     const observer = new ResizeObserver(measure)
     if (viewport.current) { measure(); observer.observe(viewport.current); const main = viewport.current.closest<HTMLElement>('.drive-main'); if (main) observer.observe(main) }

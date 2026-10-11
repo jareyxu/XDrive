@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
 import { defaultRangeExtractor, useVirtualizer } from '@tanstack/react-virtual'
-import { ChevronDown, ChevronRight, Folder, LoaderCircle, RotateCw } from 'lucide-react'
+import { ChevronDown, ChevronRight, LoaderCircle, RotateCw } from 'lucide-react'
+import { FileGlyph } from './FileGlyph'
 import type { DirectoryState, DriveEntry, UnlockedVault } from '../api/client'
 import { loadDirectory } from '../api/client'
 
@@ -161,7 +162,7 @@ export function FolderTree({ vault, currentIndexId, currentPath, onNavigate }: P
             {row.state ? <button type="button" className={`folder-tree-state${row.state === 'error' ? ' is-error' : ''}`} tabIndex={focused ? 0 : -1} onFocus={() => setFocusedId(row.id)} onClick={() => row.state === 'error' && void read(row.indexId)}><span aria-hidden="true">{row.state === 'loading' ? <LoaderCircle size={13} /> : row.state === 'error' ? <RotateCw size={13} /> : null}</span>{row.name}</button> : <div className={`folder-tree-row${selected ? ' is-current' : ''}`} style={{ '--tree-depth': row.depth } as CSSProperties}>
               <button className="folder-tree-expander" type="button" tabIndex={focused ? 0 : -1} aria-label={`${row.expanded ? '折叠' : '展开'} ${row.name}`} aria-expanded={row.expanded} onFocus={() => setFocusedId(row.id)} onClick={() => toggle(row.indexId)}>{row.expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button>
               <button className="folder-tree-name" type="button" tabIndex={focused ? 0 : -1} aria-current={selected ? 'page' : undefined} onFocus={() => setFocusedId(row.id)} onClick={() => onNavigate(row.indexId, row.ancestors)}>
-                <Folder size={16} aria-hidden="true" /><span>{row.name}</span>
+                <FileGlyph kind="folder" /><span>{row.name}</span>
               </button>
             </div>}
           </div>

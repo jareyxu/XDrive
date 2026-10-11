@@ -33,6 +33,7 @@ it('confirms a backup download before asking the server to stream it', async () 
   api.fetchSystemInfo.mockResolvedValue({ version: 'v1.3.3', commit: 'abc123', clientProtocolVersion: 1, encryptedFormatVersion: 2 })
   api.prepareBackupDownload.mockRejectedValue(new Error('test failure'))
   render(<SettingsScreen now={Date.now()} revision={0} onChangePassword={() => undefined} passwordDisabled={false} />)
+  await user.click(screen.getByRole('button', { name: '备份' }))
 
   await user.click(screen.getByRole('button', { name: '创建并下载备份' }))
   expect(screen.getByRole('group', { name: '确认创建备份' })).not.toBeNull()

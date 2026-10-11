@@ -22,7 +22,7 @@ export function VirtualEntryList<T>({ entries, itemKey, renderEntry, label = 'æ–
   useEffect(() => {
     if (typeof matchMedia !== 'function') return
     const query = matchMedia(touchQuery)
-    const changed = () => setRowHeight(query.matches ? 56 : 36)
+    const changed = () => setRowHeight(query.matches ? 56 : 44)
     query.addEventListener('change', changed)
     return () => query.removeEventListener('change', changed)
   }, [])

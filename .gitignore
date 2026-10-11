@@ -83,3 +83,7 @@ __pycache__/
 /output/install-caddy-rollback-*/runtime/
 /output/operation-lock-safety-*/runtime/
 /output/systemd-upgrade-*/runtime/
+
+# Local UI verification snapshots and decrypted test fixtures
+/.playwright-cli/
+/output/playwright/

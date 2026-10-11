@@ -2,18 +2,18 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v2.0.0",
+    "version": "v2.0.1",
     "reviewedAt": "2026-10-11",
-    "reviewer": "Release gate review following the user-authorized v2.0.0 publication request; format contracts checked against the unchanged matrix",
+    "reviewer": "Release gate review for the user-authorized v2.0.1 publication; format contracts checked against the unchanged matrix",
     "evidence": [
-      "This release changes the browser desktop shell and navigation UI. Encrypted object, key derivation, AAD, directory, trash, manifest, backup, SQLite, and client mutation contracts remain unchanged from v1.3.7.",
-      "Local make test passed with Go 1.27.1, Node 26.0.0, and pnpm 11.24.0, including frontend typecheck/lint/build, Go tests, installer/update tests, 533 web tests, and 3 TLS proxy tests.",
-      "Local go test -race -count=1 ./... passed on macOS arm64.",
+      "This release corrects the v2.0.0 desktop interface after review of the reference design and VPS screenshots. Encrypted object, key derivation, AAD, directory, trash, manifest, backup, SQLite, and client mutation contracts remain unchanged from v1.3.7.",
+      "Full local make test passed: frontend typecheck/lint/build, Go vet and tests, installer/update tests, 533 web tests, and 3 TLS proxy tests. Exact-commit Linux CI remains a release gate.",
+      "Chromium UI checks covered 1672x941 desktop and 390x844 mobile layouts, settings categories and theme, real encrypted upload, image thumbnail/preview, trash restore, window controls, and removal of decrypted filenames after lock. This is not a real-device Safari/Android certification.",
       "Publication remains gated on successful exact-commit main CI on Ubuntu 24.04, including all-package race checks and Linux amd64/arm64 cross-builds; the release workflow builds and checksum-publishes both architectures.",
       "Manual browser screenshot and mobile-device visual QA were not performed and are not claimed as verified."
     ]
   },
-  "scope": "XDrive v2.0.0 desktop shell and settings UI redesign; persistent data, cryptographic, SQLite, backup, and client mutation contracts unchanged from v1.3.7",
+  "scope": "XDrive v2.0.1 desktop UI polish based on reference and VPS screenshot review; persistent data, cryptographic, SQLite, backup, and client mutation contracts unchanged from v1.3.7",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,

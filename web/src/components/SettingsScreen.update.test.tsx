@@ -38,6 +38,7 @@ afterEach(() => { cleanup(); vi.clearAllMocks() })
 it('checks a release, asks for confirmation, and reports the completed server update', async () => {
   const user = userEvent.setup()
   render(<SettingsScreen now={Date.now()} revision={0} onChangePassword={() => undefined} passwordDisabled={false} />)
+  await user.click(screen.getByRole('button', { name: '软件更新' }))
 
   await user.click(screen.getByRole('button', { name: '检查更新' }))
   expect((await screen.findByRole('link', { name: 'v1.4.0' })).getAttribute('href')).toBe('https://github.com/jareyxu/XDrive/releases/tag/v1.4.0')
@@ -55,6 +56,7 @@ it('shows actionable server guidance when an update request is rejected', async 
   const user = userEvent.setup()
   api.startSystemUpdate.mockRejectedValueOnce(new APIError(409, 'release_changed'))
   render(<SettingsScreen now={Date.now()} revision={0} onChangePassword={() => undefined} passwordDisabled={false} />)
+  await user.click(screen.getByRole('button', { name: '软件更新' }))
 
   await user.click(screen.getByRole('button', { name: '检查更新' }))
   await screen.findByRole('link', { name: 'v1.4.0' })
