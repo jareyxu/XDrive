@@ -1916,7 +1916,11 @@ async function writeZipSelection(
 }
 
 /** Reads authenticated plaintext ranges without ever materializing the whole file. */
-export async function createEncryptedRangeReader(vault: Pick<UnlockedVault, 'vaultKey' | 'dataKey'>, entry: DriveEntry, signal?: AbortSignal, onNetworkWaiting: (waiting: boolean) => void = () => undefined, options: RangeReaderOptions = {}): Promise<EncryptedRangeReader> {
+export interface EncryptedRangeReaderOptions extends RangeReaderOptions {
+  onDownloadProgress?: (receivedBytes: number, totalBytes: number) => void
+}
+
+export async function createEncryptedRangeReader(vault: Pick<UnlockedVault, 'vaultKey' | 'dataKey'>, entry: DriveEntry, signal?: AbortSignal, onNetworkWaiting: (waiting: boolean) => void = () => undefined, options: EncryptedRangeReaderOptions = {}): Promise<EncryptedRangeReader> {
   if (!entry.fileId || !entry.manifestObjectId || !entry.manifestSha256 || !Number.isSafeInteger(entry.size) || entry.size === undefined || entry.size < 0) {
     throw new TypeError('文件目录项不完整。')
   }
@@ -1927,7 +1931,7 @@ export async function createEncryptedRangeReader(vault: Pick<UnlockedVault, 'vau
   return createChunkRangeReader(entry.size, manifest.chunkSize ?? FILE_CHUNK_BYTES, async (index, chunkSignal) => {
     const record = manifest.chunks[index]
     if (!record) throw new RangeError('Range points outside the file')
-    const encrypted = new Uint8Array(await requestArrayBuffer(`/api/v1/objects/${encodeURIComponent(record.objectId)}`, record.plaintextSize + ENVELOPE_OVERHEAD_BYTES, chunkSignal, onNetworkWaiting))
+    const encrypted = new Uint8Array(await requestArrayBuffer(`/api/v1/objects/${encodeURIComponent(record.objectId)}`, record.plaintextSize + ENVELOPE_OVERHEAD_BYTES, chunkSignal, onNetworkWaiting, options.onDownloadProgress))
     const aad = chunkAAD({ fileId: entry.fileId!, chunkIndex: index, chunkCount: manifest.chunks.length, plaintextSize: record.plaintextSize }, fileCryptoVersion)
     let plaintext: Uint8Array | undefined
     try {
@@ -2263,7 +2267,7 @@ async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   return requestWithInit<T>(path, { method: 'GET', credentials: 'same-origin', signal })
 }
 
-async function requestArrayBuffer(path: string, maxBytes = 16 * 1024 * 1024, signal?: AbortSignal, onNetworkWaiting: (waiting: boolean) => void = () => undefined): Promise<ArrayBuffer> {
+async function requestArrayBuffer(path: string, maxBytes = 16 * 1024 * 1024, signal?: AbortSignal, onNetworkWaiting: (waiting: boolean) => void = () => undefined, onProgress?: (receivedBytes: number, totalBytes: number) => void): Promise<ArrayBuffer> {
   return retryNetworkRequest(async () => {
     let response: Response
     try { response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal }) }
@@ -2282,6 +2286,7 @@ async function requestArrayBuffer(path: string, maxBytes = 16 * 1024 * 1024, sig
     const buffer = new Uint8Array(contentLength)
     let offset = 0
     try {
+      onProgress?.(0, contentLength)
       while (true) {
         throwIfAborted(signal)
         let result: ReadableStreamReadResult<Uint8Array>
@@ -2291,6 +2296,7 @@ async function requestArrayBuffer(path: string, maxBytes = 16 * 1024 * 1024, sig
         if (result.value.byteLength > contentLength - offset) throw new TypeError('encrypted object size does not match its response header')
         buffer.set(result.value, offset)
         offset += result.value.byteLength
+        onProgress?.(offset, contentLength)
       }
       throwIfAborted(signal)
       if (offset !== contentLength) throw new TypeError('encrypted object size does not match its response header')

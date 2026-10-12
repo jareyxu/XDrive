@@ -142,6 +142,28 @@ test('a large-file fallback keeps its real failure stage and copies only safe di
   expect(text).not.toContain('/__xdrive_media/')
 })
 
+test('startup progress and diagnostics distinguish ciphertext transfer from relay verification', async () => {
+  const clipboard = vi.fn().mockResolvedValue(undefined)
+  vi.stubGlobal('navigator', { userAgent: 'test-browser', clipboard: { writeText: clipboard } })
+  vi.stubGlobal('isSecureContext', true)
+  let update!: (progress: { stage: 'initial-data'; receivedBytes: number; totalBytes: number; networkWaiting: boolean }) => void
+  let reject!: (error: Error) => void
+  mocks.create.mockImplementation((_vault, _entry, _signal, onProgress) => {
+    update = onProgress
+    return new Promise((_resolve, fail) => { reject = fail })
+  })
+  mount()
+  await waitFor(() => expect(update).toBeDefined())
+  act(() => update({ stage: 'initial-data', receivedBytes: 1024 ** 2, totalBytes: 8 * 1024 ** 2 + 36, networkWaiting: false }))
+  expect(screen.getByRole('status').textContent).toContain('正在下载视频首块：1.0 MB / 8.0 MB')
+  act(() => reject(new VideoStreamError('network', '下载并校验视频首块超时，请检查网络后重试。', undefined, 'initial-data')))
+  expect((await screen.findByRole('alert')).textContent).toContain('首块超时')
+  expect(mocks.limit).not.toHaveBeenCalled()
+  fireEvent.click(screen.getByRole('button', { name: '复制播放诊断' }))
+  await waitFor(() => expect(clipboard).toHaveBeenCalledOnce())
+  expect(JSON.parse(clipboard.mock.calls[0]![0])).toMatchObject({ stage: 'initial-data', initialReceivedBytes: 1024 ** 2, initialTotalBytes: 8 * 1024 ** 2 + 36, networkWaiting: false })
+})
+
 test('a controller replacement rebuilds the session and restores the current position', async () => {
   const container = new EventTarget()
   const browser = { userAgent: navigator.userAgent, serviceWorker: container }

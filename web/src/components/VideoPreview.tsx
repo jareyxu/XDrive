@@ -4,7 +4,7 @@ import type { IdleLockTask } from '../security/idle-lock'
 import { formatBytes } from '../utils/format-bytes'
 import { RequestIdControl } from './RequestIdControl'
 import { useErrorNotice } from './use-error-notice'
-import type { VideoRangeSession } from '../media/video-range'
+import type { VideoRangeSession, VideoStartupProgress } from '../media/video-range'
 
 export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; holdIdleLock: (kind: IdleLockTask) => () => void }) {
   const [source, setSource] = useState('')
@@ -12,13 +12,14 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
   const [error, setError, errorRequestId] = useErrorNotice()
   const [retry, setRetry] = useState(0)
   const [status, setStatus] = useState('正在验证分块播放能力…')
-  const [diagnostic, setDiagnostic] = useState<{ stage: string; reason: string; mediaCode?: number; errorName?: string } | null>(null)
+  const startup = useRef<VideoStartupProgress | undefined>(undefined)
+  const [diagnostic, setDiagnostic] = useState<{ stage: string; reason: string; mediaCode?: number; errorName?: string; startup?: VideoStartupProgress } | null>(null)
   const [copyStatus, setCopyStatus] = useState('')
   const reportError = useCallback((message: string, cause?: unknown, stage = 'player', mediaCode?: number) => {
     setError(message, cause)
     const original = cause instanceof Error && cause.cause instanceof Error ? cause.cause : cause
     const name = original instanceof Error || original instanceof DOMException ? original.name : undefined
-    setDiagnostic({ stage, reason: message, mediaCode, errorName: name && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/u.test(name) ? name : undefined })
+    setDiagnostic({ stage, reason: message, mediaCode, startup: startup.current, errorName: name && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/u.test(name) ? name : undefined })
     setCopyStatus('')
   }, [setError])
   const video = useRef<HTMLVideoElement>(null)
@@ -45,6 +46,7 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
   }
 
   useEffect(() => {
+    startup.current = undefined
     const controller = new AbortController()
     let disposed = false
     let rangeSession: VideoRangeSession | undefined
@@ -95,7 +97,11 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
         if (!active()) return
         if (forceBlob.current) throw new module.VideoStreamError('session', '浏览器原生播放器拒绝此视频流，可能是播放接口或视频编码不兼容。', undefined, 'player')
         if (!module.supportsVideoRange()) throw new module.VideoStreamError('session', '浏览器缺少分块播放能力，请使用 HTTPS 和支持 Service Worker 的浏览器。', undefined, 'controller')
-        rangeSession = await module.createVideoRangeSession(props.vault, props.entry, controller.signal)
+        rangeSession = await module.createVideoRangeSession(props.vault, props.entry, controller.signal, progress => {
+          if (!active()) return
+          startup.current = progress
+          setStatus(progress.networkWaiting ? '视频数据连接中断，正在重试…' : progress.stage === 'manifest' ? '正在读取视频信息…' : progress.stage === 'probe' ? '视频首块已准备完成，正在验证播放通道…' : progress.totalBytes > 0 && progress.receivedBytes < progress.totalBytes ? `正在下载视频首块：${formatBytes(progress.receivedBytes)} / ${formatBytes(progress.totalBytes)}` : '正在校验视频首块…')
+        })
         if (!active()) { rangeSession.close(); return }
         session.current = rangeSession
         blobMode.current = false
@@ -176,7 +182,7 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
   }
   const copyDiagnostic = async () => {
     try {
-      await navigator.clipboard.writeText(JSON.stringify({ stage: diagnostic?.stage, reason: diagnostic?.reason, errorName: diagnostic?.errorName, mediaErrorCode: diagnostic?.mediaCode, fileSizeBytes: props.entry.size, userAgent: navigator.userAgent, secureContext: isSecureContext, serviceWorkerAvailable: 'serviceWorker' in navigator, pageControlled: Boolean(navigator.serviceWorker?.controller) }, null, 2))
+      await navigator.clipboard.writeText(JSON.stringify({ stage: diagnostic?.stage, reason: diagnostic?.reason, errorName: diagnostic?.errorName, mediaErrorCode: diagnostic?.mediaCode, startupStage: diagnostic?.startup?.stage, initialReceivedBytes: diagnostic?.startup?.receivedBytes, initialTotalBytes: diagnostic?.startup?.totalBytes, networkWaiting: diagnostic?.startup?.networkWaiting, probeStep: diagnostic?.startup?.probeStep, fileSizeBytes: props.entry.size, userAgent: navigator.userAgent, secureContext: isSecureContext, serviceWorkerAvailable: 'serviceWorker' in navigator, pageControlled: Boolean(navigator.serviceWorker?.controller) }, null, 2))
       setCopyStatus('播放诊断已复制。')
     } catch { setCopyStatus('无法复制，请截图保留当前提示。') }
   }

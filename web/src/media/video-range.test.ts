@@ -10,6 +10,7 @@ vi.mock('../api/client', () => ({ createEncryptedRangeReader: mocks.createEncryp
 
 import { createVideoRangeSession } from './video-range'
 import { supportsVideoRange, verifyVideoRange, VideoStreamError, videoResponseMime } from './video-range'
+import { createChunkRangeReader } from './chunk-range-reader'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -64,7 +65,7 @@ test('pagehide closes a video Range session, aborts active decryption, and erase
       readSignal = signal
       started.resolve()
       return late.promise
-    }),
+    }).mockResolvedValueOnce(new Uint8Array(2)),
     destroy: vi.fn(),
   }
   mocks.createEncryptedRangeReader.mockResolvedValue(reader)
@@ -115,7 +116,7 @@ test('a seek cancels page-owned Range reads and returns the pending read error t
     readRange: vi.fn((_begin: number, _end: number, signal: AbortSignal) => new Promise<Uint8Array>((_resolve, reject) => {
       readSignal = signal
       signal.addEventListener('abort', () => reject(new DOMException('cancelled', 'AbortError')), { once: true })
-    })),
+    })).mockResolvedValueOnce(new Uint8Array(2)),
     destroy: vi.fn(),
   }
   mocks.createEncryptedRangeReader.mockResolvedValue(reader)
@@ -180,9 +181,78 @@ test('AEAD authentication failures are integrity errors rather than network erro
   await expect(createVideoRangeSession({} as never, { kind: 'file', mime: 'video/mp4' } as never)).rejects.toMatchObject({ kind: 'integrity' })
 })
 
+test('cold authenticated data is ready before relay admission and is reused for the probe', async () => {
+  const cold = deferred<Uint8Array>()
+  const load = vi.fn(() => cold.promise)
+  const reader = createChunkRangeReader(4096, 4096, load)
+  mocks.createEncryptedRangeReader.mockResolvedValue(reader)
+  let port!: MessagePort
+  const worker = { postMessage: vi.fn((message, ports: Transferable[]) => {
+    port = ports[0] as MessagePort
+    port.postMessage({ type: 'registered', sessionId: message.sessionId })
+  }) }
+  mocks.controlledRelayWorker.mockResolvedValue(worker)
+  const originalFetch = vi.mocked(fetch)
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    if (init.method === 'GET') {
+      const bytes = await new Promise<Uint8Array>(resolve => {
+        port.onmessage = event => resolve(event.data.bytes)
+        port.postMessage({ type: 'read', readId: 1, begin: 0, end: 2 })
+      })
+      return new Response(bytes.slice().buffer as ArrayBuffer, { status: 206, headers: { 'Content-Range': 'bytes 0-1/4096', 'Content-Length': '2' } })
+    }
+    return originalFetch(url, init)
+  }))
+  const progress = vi.fn()
+  const opening = createVideoRangeSession({} as never, { kind: 'file', mime: 'video/mp4' } as never, undefined, progress)
+  await vi.waitFor(() => expect(load).toHaveBeenCalledOnce())
+  expect(mocks.controlledRelayWorker).not.toHaveBeenCalled()
+  expect(fetch).not.toHaveBeenCalled()
+  const block = new Uint8Array(4096).fill(42)
+  cold.resolve(block)
+  const owned = await opening
+  expect(load).toHaveBeenCalledOnce()
+  expect(progress.mock.calls.map(([value]) => value.stage)).toContain('initial-data')
+  expect(progress.mock.calls.at(-1)![0]).toMatchObject({ stage: 'probe', probeStep: 'complete' })
+  owned.close()
+  expect(block.every(byte => byte === 0)).toBe(true)
+  port.close()
+})
+
+test('initial-data timeout aborts the download and never opens a relay', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('window', globalThis)
+  const destroy = vi.fn()
+  mocks.createEncryptedRangeReader.mockResolvedValue({ length: 4096, destroy, readRange: vi.fn((_begin, _end, signal: AbortSignal) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+  })) })
+  const opening = createVideoRangeSession({} as never, { kind: 'file', mime: 'video/mp4' } as never)
+  const assertion = expect(opening).rejects.toMatchObject({ kind: 'network', stage: 'initial-data' })
+  await vi.advanceTimersByTimeAsync(90000)
+  await assertion
+  expect(destroy).toHaveBeenCalledOnce()
+  expect(mocks.controlledRelayWorker).not.toHaveBeenCalled()
+  expect(vi.getTimerCount()).toBe(0)
+})
+
+test('owner cancellation during cold loading erases reader state and prevents relay registration', async () => {
+  const owner = new AbortController()
+  const load = vi.fn((_index, signal: AbortSignal) => new Promise<Uint8Array>((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true })
+  }))
+  const reader = createChunkRangeReader(4096, 4096, load, owner.signal)
+  mocks.createEncryptedRangeReader.mockResolvedValue(reader)
+  const opening = createVideoRangeSession({} as never, { kind: 'file', mime: 'video/mp4' } as never, owner.signal)
+  const assertion = expect(opening).rejects.toMatchObject({ name: 'AbortError' })
+  await vi.waitFor(() => expect(load).toHaveBeenCalledOnce())
+  owner.abort()
+  await assertion
+  expect(mocks.controlledRelayWorker).not.toHaveBeenCalled()
+})
+
 test('codec parameters produce a valid relay MIME without changing authenticated metadata', async () => {
   const entry = { kind: 'file', mime: 'video/mp4; codecs="avc1.42E01E"' } as never
-  mocks.createEncryptedRangeReader.mockResolvedValue({ length: 4096, destroy: vi.fn() })
+  mocks.createEncryptedRangeReader.mockResolvedValue({ length: 4096, readRange: vi.fn().mockResolvedValue(new Uint8Array(2)), destroy: vi.fn() })
   let port!: MessagePort
   const postMessage = vi.fn((message, ports: Transferable[]) => {
     expect(message.mime).toBe('video/mp4')
