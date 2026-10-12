@@ -70,6 +70,37 @@ func TestRestoreResetsGCProgressAndMigratesSchemaSix(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			snapshot, err := sql.Open("sqlite", "file:"+filepath.Join(stage, snapshotName))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := snapshot.Exec("DROP TABLE system_assets"); err != nil {
+				_ = snapshot.Close()
+				t.Fatal(err)
+			}
+			if err := snapshot.Close(); err != nil {
+				t.Fatal(err)
+			}
+			headerPath := filepath.Join(stage, backupName)
+			raw, err := os.ReadFile(headerPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var header Header
+			if err := json.Unmarshal(raw, &header); err != nil {
+				t.Fatal(err)
+			}
+			header.SnapshotSHA256, err = hashFile(filepath.Join(stage, snapshotName))
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err = json.Marshal(header)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(headerPath, raw, 0600); err != nil {
+				t.Fatal(err)
+			}
 			if err := Verify(ctx, dest); err != nil {
 				t.Fatal(err)
 			}
@@ -91,7 +122,7 @@ func TestRestoreResetsGCProgressAndMigratesSchemaSix(t *testing.T) {
 			if err := database.QueryRow("SELECT cursor,generation FROM object_gc_state WHERE id=1").Scan(&cursor, &generation); err != nil || cursor != "" || generation != 0 {
 				t.Fatalf("restored stale cursor: %q %d %v", cursor, generation, err)
 			}
-			if err := database.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 7 {
+			if err := database.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != db.CurrentSchemaVersion {
 				t.Fatalf("restored schema: %d %v", version, err)
 			}
 		})

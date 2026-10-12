@@ -2,18 +2,18 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v2.0.4",
+    "version": "v2.0.5",
     "reviewedAt": "2026-10-12",
-    "reviewer": "User-authorized v2.0.4 playback startup and diagnostic patch; persistent format contracts reviewed unchanged",
+    "reviewer": "User-authorized v2.0.5 server-shared wallpaper release; additive SQLite schema and unchanged encrypted user-data formats reviewed",
     "evidence": [
-      "Prepares and authenticates the first encrypted video chunk in the owner page before relay registration. The probe reuses the bounded chunk cache. Persistent encryption, SQLite, backup and client mutation formats remain unchanged from v1.3.7.",
-      "Full local make test passed: 560 frontend tests, TypeScript typecheck, lint/production build, Go vet/tests, installer/update tests, format and release-package contract checks, and three TLS proxy tests. New tests cover cold chunk ordering/cache reuse, startup timeout/cancellation, lifecycle cleanup and whitelist-only diagnostics. Existing lint warnings remain.",
-      "Local Chrome 155 passed real encrypted upload, Range-based playback and seek of a 323 MiB six-second H.264 MP4 padded with a free box; a short H.264 MP4 also used Range playback successfully. This does not certify a content-heavy long video or a physical iPhone.",
-      "The user reports iPhone long-video success and short-video failure, and desktop short-video success and long-video probe timeout. The production fault has not been reproduced locally and the exact original files are unavailable. The release exposes first-block bytes, network retry state and GET/HEAD probe substeps without keys, filenames or session URLs.",
+      "The wallpaper is a single bounded (10 MiB) plaintext system asset in SQLite schema 8. Its read endpoint is intentionally unauthenticated so the login page can display it; upload and deletion require a valid session, CSRF token and same-origin request. The asset is backed up with SQLite and is excluded from encrypted user-file quota.",
+      "The encrypted object envelope, vault/key-slot formats, encrypted file metadata, AAD, browser recovery payloads, client mutation protocol, and backup container format are unchanged. Backup restore accepts snapshot schemas 2–8.",
+      "This release also updates the brand mark/favicon and adds the live transfer-speed indicator. The prior v2.0.4 video startup and diagnostics behavior is retained.",
+      "Full local make test passed on 2026-10-12: web typecheck/lint/build, Go vet and tests, installer/upgrade/uninstall checks, release-format and persistent-format contracts, 560 frontend tests, and 3 TLS proxy tests. Existing lint warnings remain; no release check failed.",
       "Publication requires full local make test, exact-commit main CI with all-package race tests and Linux amd64/arm64 builds, followed by released archive checksum verification."
     ]
   },
-  "scope": "XDrive v2.0.4 separates encrypted video first-block preparation from Range relay probing and adds startup byte progress and safe diagnostics; persistent data formats unchanged",
+  "scope": "XDrive v2.0.5 adds a server-shared, publicly readable plaintext desktop wallpaper for login and desktop screens, backed by additive SQLite schema 8; encrypted user-data formats remain unchanged",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,
@@ -195,11 +195,11 @@
       ],
       "snapshotSchemaRange": {
         "minimum": 2,
-        "maximum": 7
+        "maximum": 8
       }
     },
     "sqlite": {
-      "currentSchemaVersion": 7,
+      "currentSchemaVersion": 8,
       "migrationPolicy": "forward only; after a schema-changing migration, restore the matching pre-migration database and binary before rollback"
     },
     "clientMutationProtocol": {

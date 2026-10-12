@@ -8,6 +8,10 @@ const api = vi.hoisted(() => ({
   fetchSystemInfo: vi.fn(),
   fetchSystemUpdateInfo: vi.fn(),
   fetchSystemUpdateStatus: vi.fn(),
+  SYSTEM_WALLPAPER_MAX_BYTES: 10 * 1024 * 1024,
+  fetchSystemWallpaper: vi.fn(),
+  uploadSystemWallpaper: vi.fn(),
+  deleteSystemWallpaper: vi.fn(),
   prepareBackupDownload: vi.fn(),
   startSystemUpdate: vi.fn(),
 }))

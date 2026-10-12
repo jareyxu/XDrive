@@ -8,67 +8,83 @@
   color: var(--label-2);
 }
 .boot-screen p { margin: 0; }
-.boot-mark { color: var(--accent); animation: breathe 1.3s ease-in-out infinite alternate; }
+.boot-mark { width: 38px; height: 38px; object-fit: contain; animation: breathe 1.3s ease-in-out infinite alternate; }
+.boot-brand-mark { width: 42px; height: 42px; object-fit: contain; }
 @keyframes breathe { to { opacity: 0.48; transform: translateY(-2px); } }
 
 .auth-screen {
   isolation: isolate;
   position: relative;
+  width: 100%;
   min-height: 100svh;
   overflow: hidden;
-  background: linear-gradient(138deg, var(--wallpaper-a), var(--wallpaper-b));
+  background: #537b9e var(--xdrive-wallpaper-image, url('./assets/desktop-wallpaper.jpg')) center / cover no-repeat;
 }
-.auth-glow {
-  position: absolute;
-  z-index: -1;
-  width: 580px;
-  height: 580px;
-  top: -320px;
-  right: -120px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(91, 157, 199, 0.22), transparent 68%);
-  pointer-events: none;
+:root[data-theme="dark"] .auth-screen {
+  background-image: linear-gradient(rgb(8 20 40 / 38%), rgb(8 20 40 / 38%)), var(--xdrive-wallpaper-image, url('./assets/desktop-wallpaper.jpg'));
 }
 .brand-row {
-  position: relative;
-  z-index: 1;
+  position: absolute;
+  inset: 0 0 auto;
   display: flex;
+  min-height: 50px;
   align-items: center;
   gap: 10px;
-  padding: 25px 36px;
-  color: var(--label-1);
+  padding: 0 28px;
+  background: rgb(29 88 148 / 65%);
+  color: #fff;
+  box-shadow: 0 1px rgb(255 255 255 / 18%);
   font-size: 15px;
   font-weight: 650;
   letter-spacing: -0.02em;
 }
-.brand-icon {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  border-radius: 10px;
-  background: var(--fill-2);
-  color: var(--accent);
-}
+.brand-wordmark { display: block; width: 126px; height: 30px; object-fit: contain; object-position: left center; filter: brightness(0) invert(1); }
 .brand-private {
   display: flex;
   align-items: center;
   gap: 5px;
   margin-left: 5px;
-  color: var(--label-2);
+  color: rgb(255 255 255 / 82%);
   font-size: 12px;
   font-weight: 500;
 }
 .auth-content {
-  position: relative;
-  z-index: 1;
-  width: min(100% - 32px, 448px);
-  margin: clamp(35px, 9vh, 92px) auto 48px;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: auto;
 }
+.auth-window {
+  position: absolute;
+  top: calc(50% + 25px);
+  left: 50%;
+  display: flex;
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100svh - 92px);
+  flex-direction: column;
+  overflow: hidden;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgb(255 255 255 / 78%);
+  border-radius: 16px;
+  background: var(--surface-content);
+  box-shadow: 0 24px 70px rgb(12 36 67 / 30%), 0 3px 12px rgb(0 20 40 / 14%);
+}
+.auth-window-titlebar {
+  display: flex;
+  min-height: 50px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px;
+  border-bottom: 1px solid var(--separator);
+  background: var(--surface-thick);
+  color: var(--label-1);
+}
+.auth-window-title { display: flex; align-items: center; gap: 9px; font-size: 14px; }
+.auth-window-title img { width: 24px; height: 22px; object-fit: contain; }
+.auth-window-caption { overflow: hidden; color: var(--label-3); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .auth-card {
-  padding: 34px;
-  border-radius: var(--radius-panel);
+  padding: 30px 34px 22px;
 }
 .auth-heading { margin-bottom: 28px; }
 .eyebrow {
@@ -136,7 +152,7 @@
 .security-note { display: flex; align-items: flex-start; gap: 9px; margin-top: 23px; padding-top: 18px; border-top: 1px solid var(--separator); color: var(--label-2); }
 .security-note svg { flex: 0 0 auto; margin-top: 2px; color: var(--success); }
 .security-note p { margin: 0; font-size: 12px; }
-.auth-footnote { margin: 18px 0 0; color: var(--label-3); font-size: 11px; text-align: center; }
+.auth-footnote { margin: 20px 0 0; color: var(--label-3); font-size: 11px; text-align: center; }
 .spinner { width: 15px; height: 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
@@ -267,9 +283,10 @@
 .password-dialog form > footer button { min-height: 36px; padding: 0 14px; }
 
 @media (max-width: 760px) {
-  .brand-row { padding: 18px 20px; }
-  .auth-content { margin-top: clamp(30px, 7vh, 60px); }
-  .auth-card { padding: 27px 23px; }
+  .brand-row { padding-inline: 14px; }
+  .brand-wordmark { width: 112px; height: 27px; }
+  .auth-window { width: min(480px, calc(100vw - 24px)); max-height: calc(100svh - 82px); }
+  .auth-card { padding: 25px 23px 20px; }
   .auth-heading h1 { font-size: 25px; }
   .drive-shell { display: block; padding-bottom: 64px; }
   .sidebar { position: fixed; z-index: 4; inset: auto 0 0; width: 100%; height: 62px; flex-direction: row; align-items: center; padding: 0 max(12px, env(safe-area-inset-left)); border: 0; border-top: 1px solid var(--separator); }
@@ -283,6 +300,12 @@
   .content-heading h1 { font-size: 22px; }
   .entry-list { padding: 0 18px 30px; }
   .empty-state { min-height: 52vh; }
+}
+
+@media (max-height: 620px) {
+  .auth-window { top: 62px; max-height: calc(100svh - 74px); transform: translateX(-50%); }
+  .auth-card { padding-block: 20px 16px; }
+  .auth-heading { margin-bottom: 16px; }
 }
 
 @media (max-width: 1100px) and (min-width: 901px) and (pointer: fine) {

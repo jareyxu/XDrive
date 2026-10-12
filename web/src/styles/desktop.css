@@ -22,8 +22,11 @@
 }
 .desktop-brand, .desktop-topbar-button, .desktop-account-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 9px; background: transparent; color: inherit; cursor: pointer; }
 .desktop-brand { padding: 0; font-size: 16px; letter-spacing: -.02em; }
-.desktop-brand .brand-icon { width: 30px; height: 30px; border-radius: 9px; background: rgb(255 255 255 / 18%); color: #fff; }
+.desktop-brand img { display: block; width: 126px; height: 30px; object-fit: contain; filter: brightness(0) invert(1); }
 .desktop-topbar-actions { display: flex; height: 100%; align-items: center; gap: 12px; }
+.desktop-transfer-speed { display: flex; align-items: center; gap: 12px; padding: 0 4px; color: rgb(255 255 255 / 88%); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.desktop-transfer-rate { display: inline-flex; align-items: center; gap: 5px; }
+.desktop-transfer-rate strong { color: #fff; font-weight: 600; }
 .desktop-topbar-button { position: relative; width: 44px; border-radius: 10px; }
 .desktop-topbar-button:hover, .desktop-account-button:hover { background: rgb(255 255 255 / 12%); }
 .desktop-badge { position: absolute; top: 2px; right: 1px; display: grid; min-width: 17px; height: 17px; place-items: center; padding: 0 4px; border: 1px solid #fff; border-radius: 20px; background: #e3444e; color: #fff; font-size: 10px; font-weight: 700; }
@@ -54,10 +57,8 @@
 .desktop-icons { position: absolute; z-index: 1; top: 70px; bottom: 20px; left: 12px; display: flex; width: 92px; flex-direction: column; align-items: stretch; gap: 16px; }
 .desktop-icons > button { display: grid; min-height: 102px; align-content: center; justify-items: center; gap: 8px; border: 1px solid transparent; border-radius: 13px; background: transparent; color: #fff; text-shadow: 0 1px 4px rgb(0 0 0 / 48%); cursor: pointer; font-size: 12px; }
 .desktop-icons > button:hover, .desktop-icons > button.is-active { border-color: rgb(255 255 255 / 24%); background: rgb(255 255 255 / 15%); }
-.desktop-app-icon { display: grid; width: 54px; height: 54px; place-items: center; border: 1px solid rgb(255 255 255 / 68%); border-radius: 15px; background: linear-gradient(145deg, rgb(255 255 255 / 90%), rgb(225 239 251 / 78%)); color: #237aca; box-shadow: 0 5px 13px rgb(14 38 61 / 25%); text-shadow: none; }
-.desktop-app-icon.is-files { color: #1677d2; }
-.desktop-app-icon.is-trash { color: #5481ae; }
-.desktop-app-icon.is-settings { color: #566c84; }
+.desktop-app-icon { display: grid; width: 54px; height: 54px; place-items: center; background: transparent; text-shadow: none; }
+.desktop-app-icon img { display: block; width: 54px; height: 54px; object-fit: contain; filter: drop-shadow(0 4px 5px rgb(14 38 61 / 20%)); }
 .app-window { position: absolute; z-index: 10; top: 11%; right: 5.5%; bottom: 7%; left: max(220px, 17.4%); display: flex; min-width: min(700px, calc(100vw - 32px)); min-height: 380px; flex-direction: column; overflow: hidden; resize: both; border: 1px solid rgb(255 255 255 / 74%); border-radius: 15px; background: var(--surface-content); box-shadow: 0 26px 74px rgb(14 31 48 / 32%), 0 3px 12px rgb(14 31 48 / 15%); }
 .app-window[hidden] { display: none; }
 .app-window { max-width: calc(100vw - 230px); max-height: calc(100dvh - 116px); }
@@ -113,7 +114,6 @@
 .view-controls { margin-left: auto; }
 .folder-tree-toggle { display: none; }
 .desktop-taskbar-item { position: absolute; z-index: 35; bottom: 12px; left: 50%; display: flex; min-height: 38px; align-items: center; gap: 8px; padding: 0 15px; transform: translateX(-50%); border: 1px solid rgb(255 255 255 / 48%); border-radius: 12px; background: rgb(28 62 94 / 84%); color: #fff; box-shadow: 0 6px 22px rgb(0 20 38 / 23%); }
-.desktop-hint { position: absolute; top: 50%; left: 50%; padding: 13px 18px; transform: translate(-50%, -50%); border: 1px solid rgb(255 255 255 / 30%); border-radius: 12px; background: rgb(19 50 80 / 30%); color: #fff; font-size: 13px; text-shadow: 0 1px 4px rgb(0 0 0 / 45%); }
 .folder-tree-toggle { min-height: 36px; align-items: center; gap: 6px; padding: 0 8px; border-radius: 8px; background: var(--fill-1); color: var(--label-2); font-size: 11px; }
 .backup-notice { display: none; }
 .transfer-panel-root { z-index: 32; }
@@ -135,7 +135,6 @@
 }
 @media (max-width: 760px) {
   .desktop-topbar { height: 50px; padding: 0 max(10px, env(safe-area-inset-left)); }
-  .desktop-brand strong { font-size: 14px; }
   .desktop-topbar-actions { gap: 4px; }
   .desktop-account-anchor { padding-left: 5px; }
   .desktop-account-button { gap: 5px; font-size: 11px; }
@@ -143,6 +142,7 @@
   .desktop-icons { top: 56px; right: 8px; bottom: auto; left: 8px; display: flex; width: auto; flex-direction: row; gap: 5px; }
   .desktop-icons > button { min-width: 78px; min-height: 58px; grid-auto-flow: column; grid-template-columns: 26px auto; justify-content: center; gap: 6px; padding: 0 8px; font-size: 11px; }
   .desktop-app-icon { width: 29px; height: 29px; border-radius: 9px; }
+  .desktop-app-icon img { width: 29px; height: 29px; }
   .desktop-app-icon svg { width: 17px; height: 17px; }
   .app-window { position: absolute; inset: 118px 7px calc(10px + env(safe-area-inset-bottom)); width: auto; height: auto; min-width: 0; min-height: 0; resize: none; border-radius: 13px; }
   .app-window.is-maximized { inset: 118px 7px calc(10px + env(safe-area-inset-bottom)); }
@@ -170,21 +170,30 @@
   .backup-notice { display: none; }
   .drive-batch-actions { bottom: calc(12px + env(safe-area-inset-bottom)); }
 }
+@media (max-width: 480px) {
+  .desktop-topbar { padding-inline: 8px; }
+  .desktop-brand img { width: 100px; height: 24px; }
+  .desktop-topbar-actions { gap: 2px; }
+  .desktop-transfer-speed { gap: 6px; padding-inline: 1px; font-size: 9px; }
+  .desktop-transfer-rate { gap: 3px; }
+  .desktop-transfer-rate svg { width: 12px; height: 12px; }
+  .desktop-account-anchor { padding-left: 2px; border-left: 0; }
+  .desktop-account-button { gap: 2px; padding-inline: 2px; }
+  .desktop-account-button > span:not(.account-avatar) { display: none; }
+}
 @media (prefers-reduced-transparency: reduce) {
   .desktop-topbar, .app-window-titlebar { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 
 /* Desktop content uses a single layout layer, separate from legacy page styles. */
-.desktop-shell { background: #537b9e url('../assets/desktop-wallpaper.jpg') center / cover no-repeat; }
-:root[data-theme="dark"] .desktop-shell { background: linear-gradient(rgb(8 20 40 / 38%), rgb(8 20 40 / 38%)), url('../assets/desktop-wallpaper.jpg') center / cover no-repeat; }
+.desktop-shell { background: #537b9e var(--xdrive-wallpaper-image, url('../assets/desktop-wallpaper.jpg')) center / cover no-repeat; }
+:root[data-theme="dark"] .desktop-shell { background-image: linear-gradient(rgb(8 20 40 / 38%), rgb(8 20 40 / 38%)), var(--xdrive-wallpaper-image, url('../assets/desktop-wallpaper.jpg')); }
 .desktop-topbar { background: rgb(29 88 148 / 65%); padding-inline: 28px; }
 .desktop-brand { font-size: 20px; font-weight: 600; }
-.desktop-brand .brand-icon { display: none; }
 .desktop-account-button { font-size: 14px; }
 .desktop-icons { left: 22px; top: 72px; }
-.desktop-app-icon { width: 58px; height: 58px; border-radius: 16px; }
-.desktop-app-icon.is-files { background: linear-gradient(150deg, #7bcaff, #2278e9); color: white; }
-.desktop-app-icon.is-settings { background: linear-gradient(150deg, #b0c2d5, #4c688b); color: white; }
+.desktop-app-icon { width: 54px; height: 54px; }
+.desktop-app-icon img { width: 54px; height: 54px; }
 .desktop-icons > button { text-shadow: 0 1px 5px #14365e; }
 .app-window { top: 12%; bottom: 12%; left: 17.4%; right: 17.4%; min-width: min(960px, calc(100vw - 180px)); max-width: calc(100vw - 160px); border-radius: 16px; box-shadow: 0 24px 70px rgb(12 36 67 / 30%), 0 3px 12px rgb(0 20 40 / 14%); }
 .app-window-titlebar { min-height: 50px; padding-inline: 20px 12px; background: var(--surface-thick); }
@@ -260,6 +269,7 @@
   .desktop-topbar { padding-inline: 12px; }
   .desktop-icons { left: 8px; top: 56px; }
   .desktop-app-icon { width: 29px; height: 29px; border-radius: 8px; }
+  .desktop-app-icon img { width: 29px; height: 29px; }
   .app-window, .app-window.is-maximized { inset: 118px 7px calc(10px + env(safe-area-inset-bottom)); width: auto !important; height: auto !important; min-width: 0; max-width: none; border-radius: 12px; }
   .app-window-body { display: block; }
   .sidebar { display: none; }

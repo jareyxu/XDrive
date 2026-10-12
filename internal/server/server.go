@@ -262,6 +262,31 @@ func NewWithBuild(cfg config.Config, version, commit string) (*Handler, error) {
 		}
 		writeJSON(w, http.StatusOK, map[string]any{"version": version, "commit": commit, "clientProtocolVersion": clientProtocolVersion, "encryptedFormatVersion": 2, "textPreviewLimit": cfg.TextPreviewLimit, "videoBlobFallbackLimit": cfg.VideoBlobFallbackLimit, "zipMemoryFallbackLimit": cfg.ZipMemoryFallbackLimit, "trashRetentionSeconds": int64(retention / time.Second)})
 	})
+	mux.HandleFunc("GET /api/v1/system/wallpaper", func(w http.ResponseWriter, r *http.Request) {
+		getSystemWallpaper(w, r, database)
+	})
+	mux.HandleFunc("PUT /api/v1/system/wallpaper", func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) {
+			writeError(w, http.StatusForbidden, "origin_rejected")
+			return
+		}
+		if !validSessionAndCSRF(r, database) {
+			writeError(w, http.StatusUnauthorized, "invalid_session")
+			return
+		}
+		putSystemWallpaper(w, r, database)
+	})
+	mux.HandleFunc("DELETE /api/v1/system/wallpaper", func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) {
+			writeError(w, http.StatusForbidden, "origin_rejected")
+			return
+		}
+		if !validSessionAndCSRF(r, database) {
+			writeError(w, http.StatusUnauthorized, "invalid_session")
+			return
+		}
+		deleteSystemWallpaper(w, r, database)
+	})
 	mux.HandleFunc("GET /api/v1/system/update", func(w http.ResponseWriter, r *http.Request) {
 		if !validSession(r, database) {
 			writeError(w, http.StatusUnauthorized, "invalid_session")

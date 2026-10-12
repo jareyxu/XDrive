@@ -1,15 +1,18 @@
 import { RequestIdControl } from './RequestIdControl'
 import { useErrorNotice } from './use-error-notice'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Palette, ArrowUpDown, HardDrive, ShieldCheck, Archive, RefreshCw, Info } from 'lucide-react'
 import { fetchStorageUsage, fetchSystemInfo, fetchSystemUpdateInfo, fetchSystemUpdateStatus, prepareBackupDownload, startSystemUpdate, type StorageUsage, type SystemInfo, type SystemUpdateInfo, type SystemUpdateStatus } from '../api/client'
 import { APIError } from '../api/api-error'
 import { effectiveBackupReminderDays, backupIsOverdue, setPreferences, usePreferences } from '../preferences/preferences'
+import { clearWallpaper, MAX_WALLPAPER_BYTES, saveWallpaper, useWallpaper, WALLPAPER_TYPES } from '../preferences/wallpaper'
 import styles from './SettingsScreen.module.css'
 
 export function SettingsScreen(props: { now: number; revision: number; onChangePassword: () => void; passwordDisabled: boolean; active?: boolean; onUpdateNotice?: (message: string, isError: boolean) => void; storageContent?: ReactNode; category?: string; onCategoryChange?: (category: string) => void }) {
   const onUpdateNotice = props.onUpdateNotice
   const preferences = usePreferences()
+  const wallpaper = useWallpaper()
+  const wallpaperInput = useRef<HTMLInputElement>(null)
   const [usage, setUsage] = useState<StorageUsage | null>(null)
   const [info, setInfo] = useState<SystemInfo | null>(null)
   const [error, setError, errorRequestId] = useErrorNotice()
@@ -26,6 +29,8 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
   const [backupError, setBackupError] = useState('')
   const [backupErrorRequestId, setBackupErrorRequestId] = useState<string | undefined>()
   const [localCategory, setLocalCategory] = useState('appearance')
+  const [wallpaperBusy, setWallpaperBusy] = useState(false)
+  const [wallpaperError, setWallpaperError] = useState('')
   const activeCategory = props.category ?? localCategory
   const setActiveCategory = props.onCategoryChange ?? setLocalCategory
   useEffect(() => {
@@ -127,6 +132,38 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
       setStartingBackup(false)
     }
   }
+  const chooseWallpaper = async (file?: File) => {
+    if (!file) return
+    setWallpaperError('')
+    if (!WALLPAPER_TYPES.includes(file.type as typeof WALLPAPER_TYPES[number])) {
+      setWallpaperError('图片格式不受支持，请选择 JPG、PNG、WebP 或 AVIF。')
+      return
+    }
+    if (file.size <= 0 || file.size > MAX_WALLPAPER_BYTES) {
+      setWallpaperError('壁纸文件需要大于 0 且不超过 10 MiB。')
+      return
+    }
+    setWallpaperBusy(true)
+    try {
+      await saveWallpaper(file)
+    } catch {
+      setWallpaperError('壁纸未能上传到服务器。请检查网络和登录状态后重试。')
+    } finally {
+      setWallpaperBusy(false)
+      if (wallpaperInput.current) wallpaperInput.current.value = ''
+    }
+  }
+  const restoreWallpaper = async () => {
+    setWallpaperError('')
+    setWallpaperBusy(true)
+    try {
+      await clearWallpaper()
+    } catch {
+      setWallpaperError('无法从服务器删除壁纸，请检查网络和登录状态后重试。')
+    } finally {
+      setWallpaperBusy(false)
+    }
+  }
   const updateStateText = (state: SystemUpdateStatus['state']) => ({ queued: '已排队，等待服务器启动更新任务…', checking: '正在确认正式版信息…', downloading: '正在下载并校验发布包…', installing: '正在安装。XDrive 服务会短暂重启…', succeeded: '更新完成，请刷新页面载入新版界面。', failed: '更新没有完成。' })[state]
   const updateFailureText = (code?: string) => ({ release_check_failed: '服务器无法连接 GitHub；没有更改已安装文件。', release_changed: '正式版在检查后发生变化，请重新检查再试。', version_not_newer: '所选版本已不比当前版本新。', unsupported_architecture: '此服务器架构暂不支持网页更新。', checksum_unavailable: '无法读取正式版校验文件；没有安装该版本。', release_invalid: '正式版信息无效；更新已停止。', upgrade_failed: '更新失败。请查看 xdrive-web-update.service 日志，确认服务恢复状态。' } as Record<string, string>)[code ?? ''] ?? '更新失败；请检查服务器更新服务日志。'
   return <section className={styles.page} aria-label="云盘设置">
@@ -142,6 +179,9 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
       <div className={styles.row}><span id="theme-label">外观模式</span><div className={styles.segment} role="group" aria-labelledby="theme-label">{([['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={preferences.theme === value} onClick={() => setPreferences({ theme: value })}>{label}</button>)}</div></div>
       <div className={`${styles.row} ${styles.stacked}`}><label htmlFor="glass-clarity">玻璃通透度 · {Math.round(preferences.clarity * 100)}%</label><input id="glass-clarity" type="range" min="0" max="1" step="0.05" value={preferences.clarity} onChange={event => setPreferences({ clarity: Number(event.target.value) })} /><div className={styles.ends}><span>着色</span><span>清透</span></div><div className={styles.preview} aria-label="通透度实时预览"><span className="glass-chrome"><strong className={styles.previewLabel}>XDrive · 实时预览</strong></span></div></div>
       <div className={styles.row}><label htmlFor="reduce-transparency">降低透明度<small>使用不透明背景，提升可读性。系统要求降低透明度时始终启用。</small></label><span className={styles.switchControl}><input id="reduce-transparency" className={styles.toggle} role="switch" type="checkbox" checked={preferences.reduceTransparency} onChange={event => setPreferences({ reduceTransparency: event.target.checked })} /><span className={styles.switchTrack} aria-hidden="true" /></span></div>
+      <div className={`${styles.row} ${styles.wallpaperRow}`}><div>桌面壁纸<small>未加密保存在服务器，由各浏览器共享；登录页未登录时也可见。请勿上传敏感图片。支持 JPG、PNG、WebP、AVIF，最大 10 MiB。</small></div><div className={styles.wallpaperActions}><input ref={wallpaperInput} className={styles.fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/avif" aria-label="选择桌面壁纸" disabled={wallpaperBusy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void chooseWallpaper(file) }} /><button type="button" className="toolbar-button" disabled={wallpaperBusy} onClick={() => wallpaperInput.current?.click()}>{wallpaperBusy ? '正在保存…' : '上传壁纸'}</button>{wallpaper.url && <button type="button" className="quiet-button" disabled={wallpaperBusy} onClick={() => void restoreWallpaper()}>恢复默认</button>}</div></div>
+      <div className={styles.wallpaperPreview} role="img" aria-label="桌面壁纸预览" style={wallpaper.url ? { backgroundImage: `url("${wallpaper.url}")` } : undefined}><span>{wallpaper.ready ? 'XDrive 桌面预览' : '正在读取壁纸…'}</span></div>
+      {wallpaperError && <p className={styles.wallpaperError} role="alert">{wallpaperError}</p>}
       <div className={styles.row}><label htmlFor="file-view">默认视图</label><select id="file-view" value={preferences.view} onChange={event => setPreferences({ view: event.target.value as 'grid' | 'list' })}><option value="grid">网格</option><option value="list">列表</option></select></div>
     </section>
     <section className={styles.group} hidden={activeCategory !== 'transfer'} aria-labelledby="transfer-title"><h2 id="transfer-title">传输</h2><div className={styles.row}><label htmlFor="upload-concurrency">上传分块并发</label><select id="upload-concurrency" value={preferences.uploadConcurrency} onChange={event => setPreferences({ uploadConcurrency: Number(event.target.value) as 2 | 3 | 4 })}>{[2, 3, 4].map(count => <option key={count} value={count}>{count} 个分块</option>)}</select></div><p className={styles.help}>从下一次文件上传或续传开始生效。并发越高，浏览器与服务器资源占用越多；默认 2 个分块。</p></section>

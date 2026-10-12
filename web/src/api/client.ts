@@ -2267,6 +2267,32 @@ async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   return requestWithInit<T>(path, { method: 'GET', credentials: 'same-origin', signal })
 }
 
+export const SYSTEM_WALLPAPER_MAX_BYTES = 10 * 1024 * 1024
+const systemWallpaperTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
+
+export async function fetchSystemWallpaper(signal?: AbortSignal): Promise<Blob | null> {
+  const response = await fetch('/api/v1/system/wallpaper', { credentials: 'same-origin', cache: 'no-store', signal })
+  if (response.status === 404) return null
+  if (!response.ok) throw await parseAPIError(response)
+  const blob = await response.blob()
+  if (!systemWallpaperTypes.has(blob.type) || blob.size === 0 || blob.size > SYSTEM_WALLPAPER_MAX_BYTES) throw new TypeError('服务器壁纸格式或大小无效。')
+  return blob
+}
+
+export async function uploadSystemWallpaper(file: File): Promise<void> {
+  await requestWithInit<void>('/api/v1/system/wallpaper', {
+    method: 'PUT', credentials: 'same-origin', cache: 'no-store',
+    headers: { 'Content-Type': file.type, 'X-CSRF-Token': csrfToken }, body: file,
+  })
+}
+
+export async function deleteSystemWallpaper(): Promise<void> {
+  await requestWithInit<void>('/api/v1/system/wallpaper', {
+    method: 'DELETE', credentials: 'same-origin', cache: 'no-store',
+    headers: { 'X-CSRF-Token': csrfToken },
+  })
+}
+
 async function requestArrayBuffer(path: string, maxBytes = 16 * 1024 * 1024, signal?: AbortSignal, onNetworkWaiting: (waiting: boolean) => void = () => undefined, onProgress?: (receivedBytes: number, totalBytes: number) => void): Promise<ArrayBuffer> {
   return retryNetworkRequest(async () => {
     let response: Response

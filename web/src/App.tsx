@@ -20,6 +20,7 @@ import { TransferStore, type TransferUpdate } from './transfers/transfer-store'
 import { VirtualEntryList } from './components/VirtualEntryList'
 import { FolderConflictDialog } from './components/FolderConflictDialog'
 import { TransferPanel } from './components/TransferPanel'
+import { TransferSpeedIndicator } from './components/TransferSpeedIndicator'
 import { FolderTree } from './components/FolderTree'
 import { backupIsOverdue, effectiveBackupReminderDays, setPreferences, usePreferences } from './preferences/preferences'
 import { useIdleLock } from './security/use-idle-lock'
@@ -188,7 +189,7 @@ function App() {
     }
   }
 
-  if (loading) return <main className="boot-screen"><div className="boot-mark"><HardDrive size={21} /></div><p>正在连接你的云盘…</p></main>
+  if (loading) return <main className="boot-screen"><img className="boot-mark" src="/brand-mark.svg" alt="XDrive" /><p>正在连接你的云盘…</p></main>
   if (!serviceReady) return <ServiceUnavailable message={error} requestId={errorRequestId} onRetry={() => window.location.reload()} />
   if (vault && revisionWarning) return <RollbackWarningScreen vault={vault} warning={revisionWarning} onAccepted={enterVault} onLock={handleLock} onLogout={() => void handleLogout()} />
   if (vault) return <UnlockedQueries><DriveScreen vault={vault} holdIdleLock={holdIdleLock} onVaultUpdate={updateVault} onLock={handleLock} onLogout={() => void handleLogout()} /></UnlockedQueries>
@@ -318,14 +319,16 @@ function LoginScreen(props: {
 
 function AuthLayout(props: { eyebrow: string; title: string; description: string; children: ReactNode }) {
   return <main className="auth-screen">
-    <div className="auth-glow" aria-hidden="true" />
-    <header className="brand-row"><div className="brand-icon"><HardDrive size={19} strokeWidth={2} /></div><span>XDrive</span><span className="brand-private"><LockKeyhole size={12} /> 私有云盘</span></header>
-    <section className="auth-content">
-      <div className="auth-card glass-thick">
-        <div className="auth-heading"><span className="eyebrow"><ShieldCheck size={14} /> {props.eyebrow}</span><h1>{props.title}</h1><p>{props.description}</p></div>
-        {props.children}
+    <header className="brand-row"><img className="brand-wordmark" src="/brand-wordmark.svg" alt="XDrive" /><span className="brand-private"><LockKeyhole size={12} /> 私有云盘</span></header>
+    <section className="auth-window" aria-label={props.title}>
+      <header className="auth-window-titlebar"><span className="auth-window-title"><img src="/brand-mark.svg" alt="" /><strong>XDrive</strong></span><span className="auth-window-caption">{props.eyebrow}</span></header>
+      <div className="auth-content">
+        <div className="auth-card">
+          <div className="auth-heading"><span className="eyebrow"><ShieldCheck size={14} /> {props.eyebrow}</span><h1>{props.title}</h1><p>{props.description}</p></div>
+          {props.children}
+          <p className="auth-footnote">端到端加密 · 单用户 · 数据保存在你的服务器</p>
+        </div>
       </div>
-      <p className="auth-footnote">端到端加密 · 单用户 · 数据保存在你的服务器</p>
     </section>
   </main>
 }
@@ -1633,8 +1636,9 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
 
   return <main className={`desktop-shell${activeView === 'drive' && zipSelections.size > 0 ? ' has-drive-selection' : ''}`}>
     <header className="desktop-topbar">
-      <button type="button" className="desktop-brand" onClick={() => setWindowOpen(false)} aria-label="显示桌面"><span className="brand-icon"><HardDrive size={19} /></span><strong>XDrive</strong></button>
+      <button type="button" className="desktop-brand" onClick={() => setWindowOpen(false)} aria-label="显示桌面"><img src="/brand-wordmark.svg" alt="XDrive" /></button>
       <div className="desktop-topbar-actions">
+        <TransferSpeedIndicator tasks={transferTasks} />
         <div className="desktop-notifications-anchor">
           <button type="button" className="desktop-topbar-button" aria-label={`通知${notificationCount ? `，${notificationCount} 条待处理` : ''}`} aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(value => !value); setReadTransferNotifications(current => new Set([...current, ...recentTransferResults.map(task => task.id)])); setSystemUpdateNotice(current => current ? { ...current, read: true } : null); setAccountMenuOpen(false) }}><Bell size={19} />{notificationCount > 0 && <span className="desktop-badge">{notificationCount > 9 ? '9+' : notificationCount}</span>}</button>
           {notificationsOpen && <section className="desktop-popover notification-popover" aria-label="通知中心">
@@ -1662,9 +1666,9 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
       </div>
     </header>
     <nav className="desktop-icons" aria-label="桌面应用">
-      <button type="button" className={activeView === 'drive' && windowOpen ? 'is-active' : ''} onClick={() => setActiveView('drive')}><span className="desktop-app-icon is-files"><Folder size={28} /></span><span>我的文件</span></button>
-      <button type="button" className={activeView === 'trash' && windowOpen ? 'is-active' : ''} onClick={() => { selection.clear(); setActiveTrashRoot(null); setTrashDirectory(null); setActiveView('trash') }}><span className="desktop-app-icon is-trash"><Trash2 size={26} /></span><span>回收站</span></button>
-      <button type="button" className={activeView === 'settings' && windowOpen ? 'is-active' : ''} onClick={() => { selection.clear(); setActiveView('settings') }}><span className="desktop-app-icon is-settings"><Settings size={27} /></span><span>设置</span></button>
+      <button type="button" className={activeView === 'drive' && windowOpen ? 'is-active' : ''} onClick={() => setActiveView('drive')}><span className="desktop-app-icon is-files"><img src="/desktop-files.png" alt="" /></span><span>我的文件</span></button>
+      <button type="button" className={activeView === 'trash' && windowOpen ? 'is-active' : ''} onClick={() => { selection.clear(); setActiveTrashRoot(null); setTrashDirectory(null); setActiveView('trash') }}><span className="desktop-app-icon is-trash"><img src="/desktop-trash.png" alt="" /></span><span>回收站</span></button>
+      <button type="button" className={activeView === 'settings' && windowOpen ? 'is-active' : ''} onClick={() => { selection.clear(); setActiveView('settings') }}><span className="desktop-app-icon is-settings"><img src="/desktop-settings.png" alt="" /></span><span>设置</span></button>
     </nav>
     <div ref={windowRef} hidden={!windowOpen || windowMinimized} className={`app-window${windowMaximized ? ' is-maximized' : ''}${activeView === 'drive' ? '' : ' is-system-window'}`} style={!windowMaximized && windowRect ? { left: windowRect.left, top: windowRect.top, width: windowRect.width, height: windowRect.height } : undefined}>
       <div className="app-window-titlebar" onPointerDown={beginWindowDrag} onPointerMove={moveWindow} onPointerUp={endWindowDrag} onPointerCancel={endWindowDrag} onDoubleClick={event => { if (!(event.target as HTMLElement).closest('button')) toggleWindowMaximized() }}>
@@ -1753,7 +1757,6 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
       </div>
     </div>
     {windowMinimized && windowOpen && <button className="desktop-taskbar-item" type="button" onClick={() => setWindowMinimized(false)}><HardDrive size={16} />{windowTitle}</button>}
-    {!windowOpen && <div className="desktop-hint">选择桌面上的应用以打开 XDrive</div>}
     {actionsEntry && <EntryActionsDialog entry={actionsEntry} parent={directory.path.length > 0} writeBlocked={writeBlocked || uploading} returnFocus={actionsTrigger} onClose={() => setActionsEntry(null)} onAction={(action: EntryAction) => {
       const entry = actionsEntry; setActionsEntry(null)
       if (action === 'rename') void handleRename(entry.entryId)
@@ -2112,7 +2115,7 @@ function ChangePasswordDialog(props: { vault: UnlockedVault; onClose: () => void
 }
 
 function ServiceUnavailable(props: { message: string; requestId?: string; onRetry: () => void }) {
-  return <main className="boot-screen"><div className="brand-icon"><HardDrive size={20} /></div><h1>XDrive</h1><p role="alert">{props.message}<RequestIdControl requestId={props.requestId} /></p><button className="primary-button" onClick={props.onRetry}>重新连接</button></main>
+  return <main className="boot-screen"><img className="boot-brand-mark" src="/brand-mark.svg" alt="XDrive" /><h1>XDrive</h1><p role="alert">{props.message}<RequestIdControl requestId={props.requestId} /></p><button className="primary-button" onClick={props.onRetry}>重新连接</button></main>
 }
 
 function describeSetupError(error: unknown): string {

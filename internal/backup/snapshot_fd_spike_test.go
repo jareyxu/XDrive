@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"xdrive/internal/db"
 )
 
 // This is a portability spike, not a production switch: verifies that the
@@ -72,7 +73,7 @@ func TestSQLiteReadsUnlinkedSnapshotThroughOwnedDescriptor(t *testing.T) {
 		t.Fatalf("unlinked snapshot objects: %d want %d error %v", count, len(manifest.Objects), err)
 	}
 	var version int
-	if err := database.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil || version != 7 {
+	if err := database.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil || version != db.CurrentSchemaVersion {
 		t.Fatalf("unlinked schema: %d %v", version, err)
 	}
 }

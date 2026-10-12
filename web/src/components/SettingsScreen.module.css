@@ -23,6 +23,13 @@
 .preview { padding: 18px; margin: 12px 0 0; border-radius: var(--radius-card); background: linear-gradient(110deg, #679bd1, #9fb4a1, #e2c5a3); overflow: hidden; }
 .preview span { display: block; padding: 18px; border-radius: var(--radius-card); text-align: center; color: var(--label-1); }
 .previewLabel { display: inline-block; padding: 4px 8px; border-radius: 6px; background: var(--surface-content); font-weight: 400; }
+.wallpaperRow { align-items: center; }
+.wallpaperActions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+.wallpaperActions :global(.quiet-button) { min-height: 44px; padding: 0 12px; color: var(--label-2); }
+.fileInput { display: none; }
+.wallpaperPreview { display: grid; min-height: 150px; place-items: center; overflow: hidden; margin: 12px 0; border: 1px solid var(--separator); border-radius: var(--radius-card); background: #537b9e url('../assets/desktop-wallpaper.jpg') center / cover no-repeat; }
+.wallpaperPreview span { padding: 9px 14px; border: 1px solid rgb(255 255 255 / 48%); border-radius: 9px; background: rgb(22 44 66 / 62%); color: white; font-size: 13px; font-weight: 600; text-shadow: 0 1px 3px #0008; }
+.wallpaperError { margin: 8px 0; color: var(--danger); font-size: 12px; }
 .toggle { flex-shrink: 0; width: 44px; height: 44px; accent-color: var(--accent); }
 .warning { padding: 12px; border: 1px solid #b86d00; border-radius: var(--radius-control); }
 .about { margin: 0; }
@@ -36,7 +43,7 @@
 .releaseDetails { margin-top: 12px; border-top: 1px solid var(--separator); padding-top: 12px; }
 .releaseDetails summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; color: var(--accent); }
 .releaseDetails pre { max-height: 280px; overflow: auto; margin: 8px 0 0; padding: 12px; border-radius: var(--radius-control); background: var(--fill-2); font: inherit; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-@media(max-width:760px) { .page { padding: 0 14px 24px; } .settingsLayout { display: block; } .categoryNav { position: sticky; z-index: 2; top: 0; display: flex; overflow-x: auto; margin: 0 -4px; padding: 5px; border-radius: 10px; scrollbar-width: thin; } .categoryNav button { min-width: max-content; min-height: 40px; } .group { padding: 16px; } .row { flex-wrap: wrap; } .segment { width: 100%; } .segment button { flex: 1; } }
+@media(max-width:760px) { .page { padding: 0 14px 24px; } .settingsLayout { display: block; } .categoryNav { position: sticky; z-index: 2; top: 0; display: flex; overflow-x: auto; margin: 0 -4px; padding: 5px; border-radius: 10px; scrollbar-width: thin; } .categoryNav button { min-width: max-content; min-height: 40px; } .group { padding: 16px; } .row { flex-wrap: wrap; } .wallpaperActions { width: 100%; } .wallpaperPreview { min-height: 120px; } .segment { width: 100%; } .segment button { flex: 1; } }
 @media(forced-colors:active) { .segment button[aria-pressed="true"] { border-color: Highlight; } .preview { background: Canvas; } .preview span, .group, .warning { border: 1px solid CanvasText; } }
 /* Settings owns its single navigation rail; category panels remain mounted. */
 .page { max-width: none; height: 100%; padding: 0; background: var(--surface-content); }

@@ -19,7 +19,7 @@ import (
 //go:embed migrations/*.sql
 var migrationFiles embed.FS
 
-const schemaVersion = 7
+const schemaVersion = 8
 
 // CurrentSchemaVersion is recorded in backup manifests and checked on restore.
 const CurrentSchemaVersion = schemaVersion
