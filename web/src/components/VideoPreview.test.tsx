@@ -21,7 +21,7 @@ beforeEach(() => {
   vi.spyOn(HTMLMediaElement.prototype, 'load').mockImplementation(() => {})
   Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' })
 })
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.clearAllMocks() })
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals() })
 
 test('a 2 GiB video uses a verified stream without consulting the Blob fallback policy', async () => {
   mount()
@@ -120,7 +120,54 @@ test('native metadata timeout stops decryption and offers retry', async () => {
   fireEvent.error(video())
   fireEvent.click(screen.getByRole('button', { name: '重试播放' }))
   await act(async () => { await Promise.resolve(); await Promise.resolve() })
-  await act(async () => { await vi.advanceTimersByTimeAsync(30000) })
+  await act(async () => { await vi.advanceTimersByTimeAsync(120000) })
   expect(screen.getByRole('alert').textContent).toContain('未能加载视频信息')
   expect(video()).toBeNull()
+})
+
+test('a large-file fallback keeps its real failure stage and copies only safe diagnostics', async () => {
+  const clipboard = vi.fn().mockResolvedValue(undefined)
+  const browser = { userAgent: navigator.userAgent, clipboard: { writeText: clipboard } }
+  vi.stubGlobal('navigator', browser)
+  vi.stubGlobal('isSecureContext', true)
+  mocks.create.mockRejectedValue(new VideoStreamError('session', '流式服务更新超时，请重试。', undefined, 'controller'))
+  render(<VideoPreview vault={{ vaultKey: 'sensitive-key' } as never} entry={{ kind: 'file', mime: 'video/mp4', name: 'sensitive-name.mp4', size: 323 * 1024 ** 2 } as never} holdIdleLock={() => vi.fn()} />)
+  expect((await screen.findByRole('alert')).textContent).toContain('流式服务更新超时')
+  fireEvent.click(screen.getByRole('button', { name: '复制播放诊断' }))
+  await waitFor(() => expect(clipboard).toHaveBeenCalledOnce())
+  const text = clipboard.mock.calls[0]![0]
+  expect(JSON.parse(text)).toMatchObject({ stage: 'controller', fileSizeBytes: 323 * 1024 ** 2 })
+  expect(text).not.toContain('sensitive-key')
+  expect(text).not.toContain('sensitive-name')
+  expect(text).not.toContain('/__xdrive_media/')
+})
+
+test('a controller replacement rebuilds the session and restores the current position', async () => {
+  const container = new EventTarget()
+  const browser = { userAgent: navigator.userAgent, serviceWorker: container }
+  vi.stubGlobal('navigator', browser)
+  const first = session('before-update'), next = session('after-update')
+  mocks.create.mockResolvedValueOnce(first).mockResolvedValueOnce(next)
+  mount()
+  await waitFor(() => expect(video()).toBeTruthy())
+  fireEvent.loadedMetadata(video())
+  video().currentTime = 42
+  fireEvent.timeUpdate(video())
+  act(() => { container.dispatchEvent(new Event('controllerchange')) })
+  await waitFor(() => expect(video()?.getAttribute('src')).toBe(next.url))
+  fireEvent.loadedMetadata(video())
+  expect(video().currentTime).toBe(42)
+  expect(first.close).toHaveBeenCalled()
+})
+
+test('native rejection of a large verified stream is reported as a player failure, not a setup failure', async () => {
+  mount()
+  await waitFor(() => expect(video()).toBeTruthy())
+  Object.defineProperty(video(), 'error', { configurable: true, value: { code: 4 } })
+  fireEvent.error(video())
+  const alert = await screen.findByRole('alert')
+  expect(alert.textContent).toContain('原生播放器拒绝')
+  expect(alert.textContent).toContain('视频编码不兼容')
+  expect(mocks.create).toHaveBeenCalledOnce()
+  expect(mocks.download).not.toHaveBeenCalled()
 })

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from 'vitest'
 import workerSource from '../../public/media-sw.js?raw'
 
-function harness(download = false) {
+function harness(download = false, length = 2) {
   const handlers = new Map<string, ((event: any) => void)[]>()
   const clients = { get: vi.fn(async (): Promise<{ id: string } | undefined> => ({ id: 'owner' })) }
   const scope = { location: { origin: 'https://xdrive.test' }, clients, addEventListener(type: string, listener: (event: any) => void) { handlers.set(type, [...handlers.get(type) ?? [], listener]) } }
@@ -10,7 +10,7 @@ function harness(download = false) {
   const port: any = { postMessage: (message: any) => messages.push(message), start() {}, close: vi.fn(), onmessage: undefined }
   const token = 'a'.repeat(32)
   let registration = Promise.resolve()
-  for (const listener of handlers.get('message') ?? []) listener({ data: download ? { type: 'xdrive-download-register', sessionId: token, length: 2, filename: 'fixture.bin' } : { type: 'xdrive-media-register', sessionId: token, length: 2, mime: 'video/mp4' }, source: { id: 'owner' }, ports: [port], waitUntil: (pending: Promise<void>) => { registration = pending } })
+  for (const listener of handlers.get('message') ?? []) listener({ data: download ? { type: 'xdrive-download-register', sessionId: token, length: 2, filename: 'fixture.bin' } : { type: 'xdrive-media-register', sessionId: token, length, mime: 'video/mp4' }, source: { id: 'owner' }, ports: [port], waitUntil: (pending: Promise<void>) => { registration = pending } })
   const fetch = async (signal: AbortSignal, clientId = 'owner', method = 'GET') => {
     await registration
     const request = new Request(`https://xdrive.test/${download ? '__xdrive_download' : '__xdrive_media'}/${token}`, { signal, method })
@@ -23,6 +23,26 @@ function harness(download = false) {
 }
 async function microtasks() { for (let i = 0; i < 12; i++) await Promise.resolve() }
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); vi.restoreAllMocks() })
+
+test('multiple pending consumer reads keep requesting bounded windows without stalling', async () => {
+  const windowBytes = 1024 * 1024
+  const worker = harness(false, 2 * windowBytes)
+  const response = (await worker.fetch(new AbortController().signal)).response
+  const reader = response.body!.getReader()
+  const first = reader.read(), second = reader.read()
+  void second.catch(() => undefined)
+  try {
+    await microtasks()
+    const initial = worker.messages.find(message => message.type === 'read')
+    worker.port.onmessage({ data: { type: 'read-result', readId: initial.readId, bytes: new Uint8Array(windowBytes).fill(1) } })
+    expect((await first).value?.byteLength).toBe(windowBytes)
+    await vi.waitFor(() => expect(worker.messages.some(message => message.type === 'read' && message.begin === windowBytes)).toBe(true))
+    const next = worker.messages.filter(message => message.type === 'read').at(-1)
+    worker.port.onmessage({ data: { type: 'read-result', readId: next.readId, bytes: new Uint8Array(windowBytes).fill(2) } })
+    expect((await second).value?.[0]).toBe(2)
+    expect((await reader.read()).done).toBe(true)
+  } finally { await reader.cancel() }
+})
 
 test('seek cancellation closes the old response but keeps the session available for a new request', async () => {
   const worker = harness(), signal = new AbortController().signal

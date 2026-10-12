@@ -2,18 +2,18 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v2.0.2",
-    "reviewedAt": "2026-10-11",
-    "reviewer": "Release gate review for the user-authorized v2.0.2 publication; mobile real-device acceptance delegated to the user",
+    "version": "v2.0.3",
+    "reviewedAt": "2026-10-12",
+    "reviewer": "Patch continuation of the user-requested mobile playback release following the iOS 27 / 323 MB MP4 failure report; persistent format contracts reviewed unchanged",
     "evidence": [
-      "This release enables runtime-probed encrypted Range playback on mobile browsers with bounded caches and cancellation, and restores playback positions after foreground return. Persistent cryptographic, SQLite, backup, and client mutation contracts remain unchanged from v1.3.7.",
-      "Full local make test passed: frontend typecheck/lint/build, Go vet/tests, installer/update tests, web tests and TLS proxy tests. The final frontend error-path changes received a supplementary typecheck, complete unit suite, lint and production build; exact-commit Linux CI remains a release gate.",
-      "Local Chromium Pixel 10 emulation passed real encrypted upload and native playback/seek of a valid 257 MiB MP4 (a 3-second fixture padded with a free box), simulated hidden/visible session replacement restoring 1.2 seconds without autoplay, and idle lock erasing decrypted filenames and returning 410 for the old media URL. This does not certify content-heavy large videos or real mobile devices.",
-      "Real-device iOS Safari and Android acceptance is pending and will be performed by the user, who explicitly requested immediate v2.0.2 stable publication. Local browser emulation is not real-device certification.",
-      "Publication remains gated on successful exact-commit main CI including all-package race tests and Linux amd64/arm64 cross-builds; the release workflow checksum-publishes both architectures."
+      "Fixes confirmed stream backpressure and Service Worker update-readiness defects, reduces startup reads, normalizes relay MIME without modifying authenticated metadata, and adds safe playback diagnostics. Persistent encryption, SQLite, backup and client mutation formats remain unchanged from v1.3.7.",
+      "Full local make test passed with 556 frontend tests, Go vet/tests, installer/update and format contract checks, plus TLS proxy tests. A supplementary web-check passed after the final equivalent MIME validation cleanup. The regression tests reproduced the lost concurrent pull and stale-controller admission on the preceding code; the corrected code passes cancellation, lifecycle and diagnostic privacy checks.",
+      "Local WebKit 26.6 iPhone emulation over loopback HTTPS passed real encrypted upload, native play and seek of a 323 MiB tail-moov H.264 MP4 padded with a free box, simulated background return restoring 1.1 seconds without autoplay, and a 410 response for the old media URL. This is not a content-heavy large-video or iOS 27 real-device certification; the user original file is unavailable locally.",
+      "User reports immediate repeatable v2.0.2 failure. Exact device/file diagnosis remains pending; the patch exposes the failed phase and provides a whitelist-only diagnostic copy without names, keys or media session URLs.",
+      "Publication requires exact-commit main CI with all-package race tests and Linux amd64/arm64 builds, followed by release archive checksum verification."
     ]
   },
-  "scope": "XDrive v2.0.2 mobile encrypted video Range playback, bounded memory and session recovery; persistent data formats unchanged from v1.3.7",
+  "scope": "XDrive v2.0.3 encrypted video startup reliability, bounded streaming backpressure, worker update readiness and playback diagnostics; persistent data formats unchanged",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,

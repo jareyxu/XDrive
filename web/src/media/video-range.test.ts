@@ -9,7 +9,7 @@ vi.mock('../sw/controller', () => ({ controlledRelayWorker: mocks.controlledRela
 vi.mock('../api/client', () => ({ createEncryptedRangeReader: mocks.createEncryptedRangeReader }))
 
 import { createVideoRangeSession } from './video-range'
-import { supportsVideoRange, verifyVideoRange, VideoStreamError } from './video-range'
+import { supportsVideoRange, verifyVideoRange, VideoStreamError, videoResponseMime } from './video-range'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -18,6 +18,7 @@ function deferred<T>() {
 }
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.clearAllMocks()
 })
@@ -151,11 +152,54 @@ test('range verification rejects a full response before reading its body', async
 test('range verification reads the beginning and tail and rejects mismatched headers', async () => {
   await verifyVideoRange('/__xdrive_media/session', 4096)
   expect(vi.mocked(fetch).mock.calls.map(([, init]) => (init!.headers as Record<string, string>).Range)).toEqual(['bytes=0-1', 'bytes=4094-4095'])
+  expect(vi.mocked(fetch).mock.calls.map(([, init]) => init!.method)).toEqual(['GET', 'HEAD'])
   vi.stubGlobal('fetch', vi.fn(async () => new Response(new Uint8Array(2), { status: 206, headers: { 'Content-Length': '2', 'Content-Range': 'bytes 0-1/9999' } })))
   await expect(verifyVideoRange('/__xdrive_media/session', 4096)).rejects.toMatchObject({ kind: 'session' })
+})
+
+test('slow first-block buffering is not rejected by the former 15-second probe deadline', async () => {
+  vi.useFakeTimers()
+  vi.stubGlobal('window', globalThis)
+  const normalFetch = vi.mocked(fetch)
+  vi.stubGlobal('fetch', vi.fn(async (url, init) => {
+    if (init.method === 'GET') await new Promise(resolve => setTimeout(resolve, 20000))
+    return normalFetch(url, init)
+  }))
+  let finished = false
+  const probe = verifyVideoRange('/__xdrive_media/session', 4096).then(() => { finished = true })
+  await vi.advanceTimersByTimeAsync(15000)
+  expect(finished).toBe(false)
+  await vi.advanceTimersByTimeAsync(5000)
+  await probe
+  expect(finished).toBe(true)
+  expect(vi.getTimerCount()).toBe(0)
 })
 
 test('AEAD authentication failures are integrity errors rather than network errors', async () => {
   mocks.createEncryptedRangeReader.mockRejectedValueOnce(new DOMException('authentication failed', 'OperationError'))
   await expect(createVideoRangeSession({} as never, { kind: 'file', mime: 'video/mp4' } as never)).rejects.toMatchObject({ kind: 'integrity' })
+})
+
+test('codec parameters produce a valid relay MIME without changing authenticated metadata', async () => {
+  const entry = { kind: 'file', mime: 'video/mp4; codecs="avc1.42E01E"' } as never
+  mocks.createEncryptedRangeReader.mockResolvedValue({ length: 4096, destroy: vi.fn() })
+  let port!: MessagePort
+  const postMessage = vi.fn((message, ports: Transferable[]) => {
+    expect(message.mime).toBe('video/mp4')
+    port = ports[0] as MessagePort
+    port.postMessage({ type: 'registered', sessionId: message.sessionId })
+  })
+  mocks.controlledRelayWorker.mockResolvedValue({ postMessage })
+  const owned = await createVideoRangeSession({} as never, entry)
+  expect(mocks.createEncryptedRangeReader.mock.calls[0]![1]).toBe(entry)
+  expect(entry).toMatchObject({ mime: 'video/mp4; codecs="avc1.42E01E"' })
+  owned.close()
+  port.close()
+})
+
+test('relay MIME normalization rejects header control characters', () => {
+  expect(videoResponseMime('video/MP4; codecs="avc1.42E01E"')).toBe('video/mp4')
+  for (const mime of ['video/mp4\n', 'video/mp4;\r codecs=bad', 'text/plain', undefined]) {
+    expect(() => videoResponseMime(mime)).toThrow(VideoStreamError)
+  }
 })

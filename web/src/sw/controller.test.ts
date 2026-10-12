@@ -39,7 +39,7 @@ describe('SW readiness and conservative download capability', () => {
 })
 
 test('an activated registration explicitly claims an uncontrolled page before relay use', async () => {
-  const worker = {} as ServiceWorker
+  const worker = { postMessage: vi.fn() } as unknown as ServiceWorker
   const container = Object.assign(new EventTarget(), {
     controller: null as ServiceWorker | null,
     ready: Promise.resolve({}),
@@ -50,7 +50,8 @@ test('an activated registration explicitly claims an uncontrolled page before re
     container.controller = worker
     container.dispatchEvent(new Event('controllerchange'))
   })
-  container.register.mockResolvedValue({ active: { postMessage: claim } })
+  worker.postMessage = claim
+  container.register.mockResolvedValue({ active: worker })
   vi.stubGlobal('window', globalThis)
   vi.stubGlobal('navigator', { serviceWorker: container })
   await expect(controlledRelayWorker()).resolves.toBe(worker)
@@ -68,4 +69,43 @@ test('claim failure rejects promptly and detaches controller listeners', async (
   vi.stubGlobal('navigator', { serviceWorker: container })
   await expect(controlledRelayWorker()).rejects.toThrow('worker stopped')
   expect(remove).toHaveBeenCalledWith('controllerchange', expect.any(Function))
+})
+
+test('an installing update must activate and claim before an old controller can be used', async () => {
+  const oldWorker = { postMessage: vi.fn() }
+  const nextWorker = Object.assign(new EventTarget(), { state: 'installing', postMessage: vi.fn() })
+  const registration = { active: oldWorker, installing: nextWorker }
+  const container = Object.assign(new EventTarget(), {
+    controller: oldWorker,
+    ready: Promise.resolve(registration),
+    register: vi.fn().mockResolvedValue(registration),
+  })
+  nextWorker.postMessage.mockImplementation(() => { container.controller = nextWorker; container.dispatchEvent(new Event('controllerchange')) })
+  vi.stubGlobal('window', globalThis)
+  vi.stubGlobal('navigator', { serviceWorker: container })
+  let settled = false
+  const pending = controlledRelayWorker().then(value => { settled = true; return value })
+  for (let index = 0; index < 12; index++) await Promise.resolve()
+  expect(settled).toBe(false)
+  registration.active = nextWorker
+  nextWorker.state = 'activated'
+  nextWorker.dispatchEvent(new Event('statechange'))
+  await expect(pending).resolves.toBe(nextWorker)
+  expect(oldWorker.postMessage).not.toHaveBeenCalled()
+})
+
+test('cancelling an installing worker detaches its state listener and never admits the old controller', async () => {
+  const updating = Object.assign(new EventTarget(), { state: 'installing', postMessage: vi.fn() })
+  const removed = vi.spyOn(updating, 'removeEventListener')
+  const old = { postMessage: vi.fn() }
+  vi.stubGlobal('window', globalThis)
+  vi.stubGlobal('navigator', { serviceWorker: { controller: old, register: async () => ({ installing: updating, active: old }), ready: Promise.resolve({}) } })
+  const owner = new AbortController()
+  const pending = controlledRelayWorker(owner.signal)
+  const rejected = expect(pending).rejects.toMatchObject({ name: 'AbortError' })
+  for (let index = 0; index < 12; index++) await Promise.resolve()
+  owner.abort()
+  await rejected
+  expect(removed).toHaveBeenCalledWith('statechange', expect.any(Function))
+  expect(old.postMessage).not.toHaveBeenCalled()
 })

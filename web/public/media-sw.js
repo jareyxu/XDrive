@@ -2,6 +2,7 @@
 const PREFIX = '/__xdrive_media/'
 const WINDOW_BYTES = 1024 * 1024
 const READ_TIMEOUT_MS = 30000
+const MEDIA_READ_TIMEOUT_MS = 120000
 const MAX_SESSIONS = 8
 const OWNER_CHECK_MS = 1000
 const sessions = new Map()
@@ -273,7 +274,7 @@ function requestWindow(session, begin, end) {
       session.port.postMessage({ type: 'cancel-read', readId })
       reject(new DOMException('Media page did not respond', 'TimeoutError'))
       closeSession(session)
-    }, READ_TIMEOUT_MS)
+    }, MEDIA_READ_TIMEOUT_MS)
     const pending = { resolve, reject, timeout, length: end - begin }
     session.pending.set(readId, pending)
     watchPendingOwner(session, pending, () => session.pending.get(readId) === pending && sessions.get(session.id) === session, () => closeSession(session))
@@ -345,9 +346,11 @@ self.addEventListener('fetch', (event) => {
       pull(controller) {
         if (stopped || pulling) return
         pulling = true
-        // Settle the stream pull algorithm before awaiting the page-owned read
-        // so consumer cancel() can run immediately even while a window is in flight.
-        void (async () => {
+        // Keep the pull pending until its window arrives. Otherwise a second
+        // consumer read can pull while our own `pulling` flag is still true,
+        // lose that pull, and wait forever. Cancellation explicitly rejects
+        // the pending window, so it remains immediate without settling early.
+        return (async () => {
           try {
             const currentOwner = await self.clients.get(session.ownerId)
             if (stopped) return

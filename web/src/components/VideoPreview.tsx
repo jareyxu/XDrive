@@ -8,9 +8,19 @@ import type { VideoRangeSession } from '../media/video-range'
 
 export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; holdIdleLock: (kind: IdleLockTask) => () => void }) {
   const [source, setSource] = useState('')
+  const [readySource, setReadySource] = useState('')
   const [error, setError, errorRequestId] = useErrorNotice()
   const [retry, setRetry] = useState(0)
   const [status, setStatus] = useState('正在验证分块播放能力…')
+  const [diagnostic, setDiagnostic] = useState<{ stage: string; reason: string; mediaCode?: number; errorName?: string } | null>(null)
+  const [copyStatus, setCopyStatus] = useState('')
+  const reportError = useCallback((message: string, cause?: unknown, stage = 'player', mediaCode?: number) => {
+    setError(message, cause)
+    const original = cause instanceof Error && cause.cause instanceof Error ? cause.cause : cause
+    const name = original instanceof Error || original instanceof DOMException ? original.name : undefined
+    setDiagnostic({ stage, reason: message, mediaCode, errorName: name && /^[A-Za-z][A-Za-z0-9_-]{0,79}$/u.test(name) ? name : undefined })
+    setCopyStatus('')
+  }, [setError])
   const video = useRef<HTMLVideoElement>(null)
   const session = useRef<VideoRangeSession | null>(null)
   const playbackHold = useRef<(() => void) | null>(null)
@@ -65,17 +75,26 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
       setRetry(value => value + 1)
     }
     const visibility = () => { if (document.visibilityState === 'hidden') suspend(); else restore() }
+    const controllerChanged = () => {
+      if (!active() || suspended || !session.current) return
+      rememberPosition()
+      disposePlayback()
+      setSource('')
+      setStatus('播放服务已更新，正在恢复播放会话…')
+      setRetry(value => value + 1)
+    }
     document.addEventListener('visibilitychange', visibility)
     window.addEventListener('pagehide', suspend)
     window.addEventListener('pageshow', restore)
+    navigator.serviceWorker?.addEventListener('controllerchange', controllerChanged)
 
     if (!suspended) void (async () => {
       let module: typeof import('../media/video-range') | undefined
       try {
         module = await import('../media/video-range')
         if (!active()) return
-        if (forceBlob.current) throw new module.VideoStreamError('session', '浏览器媒体播放器未能使用分块播放。')
-        if (!module.supportsVideoRange()) throw new module.VideoStreamError('session', '浏览器缺少分块播放能力，请使用 HTTPS 和支持 Service Worker 的浏览器。')
+        if (forceBlob.current) throw new module.VideoStreamError('session', '浏览器原生播放器拒绝此视频流，可能是播放接口或视频编码不兼容。', undefined, 'player')
+        if (!module.supportsVideoRange()) throw new module.VideoStreamError('session', '浏览器缺少分块播放能力，请使用 HTTPS 和支持 Service Worker 的浏览器。', undefined, 'controller')
         rangeSession = await module.createVideoRangeSession(props.vault, props.entry, controller.signal)
         if (!active()) { rangeSession.close(); return }
         session.current = rangeSession
@@ -83,9 +102,9 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
         setSource(rangeSession.url)
       } catch (rangeError) {
         if (!active()) return
-        if (!module) { setError('视频播放器组件加载失败，请刷新页面后重试。', rangeError); return }
+        if (!module) { reportError('视频播放器组件加载失败，请刷新页面后重试。', rangeError, 'module'); return }
         if (rangeError instanceof module.VideoStreamError && rangeError.kind !== 'session') {
-          setError(rangeError.message, rangeError.cause ?? rangeError)
+          reportError(rangeError.message, rangeError.cause ?? rangeError, rangeError.stage)
           return
         }
         try {
@@ -93,7 +112,8 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
           if (!active()) return
           if (!Number.isSafeInteger(props.entry.size) || props.entry.size === undefined || props.entry.size < 0) throw new TypeError('视频目录项不完整，请下载后播放。')
           if (props.entry.size > limit) {
-            setError(`分块播放会话未能建立，请重试播放。此视频超过 ${formatBytes(limit)} 内存播放上限，也可下载后播放。`, rangeError)
+            const reason = rangeError instanceof module.VideoStreamError ? rangeError.message : '分块播放会话验证失败，请重试。'
+            reportError(`${reason} 此视频超过 ${formatBytes(limit)} 内存播放上限，请下载后播放或重试。`, rangeError, rangeError instanceof module.VideoStreamError ? rangeError.stage : 'registration', forceBlob.current ? 4 : undefined)
             return
           }
           setStatus('分块播放不可用，正在准备小视频内存播放…')
@@ -103,7 +123,7 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
           blobMode.current = true
           setSource(blobURL)
         } catch (cause) {
-          if (active()) setError(cause instanceof TypeError ? cause.message : '视频下载失败，请检查网络后重试。', cause)
+          if (active()) reportError(cause instanceof TypeError ? cause.message : '视频下载失败，请检查网络后重试。', cause, 'fallback')
         }
       }
     })()
@@ -114,8 +134,9 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
       document.removeEventListener('visibilitychange', visibility)
       window.removeEventListener('pagehide', suspend)
       window.removeEventListener('pageshow', restore)
+      navigator.serviceWorker?.removeEventListener('controllerchange', controllerChanged)
     }
-  }, [props.vault, props.entry, retry, setError, detachVideo, rememberPosition])
+  }, [props.vault, props.entry, retry, setError, reportError, detachVideo, rememberPosition])
 
   useEffect(() => {
     if (!source) return
@@ -125,13 +146,14 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
         rememberPosition()
         releasePlayback.current()
         setSource('')
-        setError('浏览器未能加载视频信息，可能是网络中断或视频格式不兼容。请重试或下载后播放。')
+        reportError('浏览器未能加载视频信息，可能是网络中断或视频格式不兼容。请重试或下载后播放。', undefined, 'metadata')
       }
-    }, 30000)
+    }, 120000)
     return clearMetadataTimer
-  }, [source, setError, detachVideo, clearMetadataTimer, rememberPosition])
+  }, [source, reportError, clearMetadataTimer, rememberPosition])
 
   const playbackError = () => {
+    if (!video.current?.getAttribute('src')) return
     stopPlaying()
     clearMetadataTimer()
     const failure = session.current?.failure()
@@ -150,11 +172,18 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
     rememberPosition()
     releasePlayback.current()
     setSource('')
-    setError(message, failure?.cause)
+    reportError(message, failure?.cause, failure?.stage ?? 'player', code)
+  }
+  const copyDiagnostic = async () => {
+    try {
+      await navigator.clipboard.writeText(JSON.stringify({ stage: diagnostic?.stage, reason: diagnostic?.reason, errorName: diagnostic?.errorName, mediaErrorCode: diagnostic?.mediaCode, fileSizeBytes: props.entry.size, userAgent: navigator.userAgent, secureContext: isSecureContext, serviceWorkerAvailable: 'serviceWorker' in navigator, pageControlled: Boolean(navigator.serviceWorker?.controller) }, null, 2))
+      setCopyStatus('播放诊断已复制。')
+    } catch { setCopyStatus('无法复制，请截图保留当前提示。') }
   }
   return <div className="video-preview-area">
     {source && <video ref={video} className="preview-video" src={source} preload="metadata" controls playsInline
       onLoadedMetadata={() => {
+        setReadySource(source)
         acceptTimeUpdates.current = true
         clearMetadataTimer()
         const element = video.current
@@ -166,7 +195,8 @@ export function VideoPreview(props: { vault: UnlockedVault; entry: DriveEntry; h
       onTimeUpdate={() => { if (acceptTimeUpdates.current) rememberPosition() }} onPlaying={resumePlaying} onSeeked={resumePlaying} onPause={stopPlaying}
       onEnded={() => { resumePosition.current = 0; stopPlaying() }} onWaiting={stopPlaying}
       onSeeking={() => { stopPlaying(); if ((video.current?.currentTime ?? 0) > 0) session.current?.cancelPendingReads() }} onError={playbackError} />}
+    {source && readySource !== source && !error && <p role="status">正在缓冲视频信息，首次播放需要读取并校验加密分块…</p>}
     {!source && !error && <p role="status">{status}</p>}
-    {error && <div className="preview-fallback" role="alert"><p>{error}<RequestIdControl requestId={errorRequestId} /></p><button type="button" onClick={() => { forceBlob.current = false; rememberPosition(); detachVideo(); setSource(''); setError(''); setStatus('正在重新建立播放会话…'); setRetry(value => value + 1) }}>重试播放</button></div>}
+    {error && <div className="preview-fallback" role="alert"><p>{error}<RequestIdControl requestId={errorRequestId} /></p><button type="button" onClick={() => { forceBlob.current = false; rememberPosition(); detachVideo(); setSource(''); setError(''); setDiagnostic(null); setCopyStatus(''); setStatus('正在重新建立播放会话…'); setRetry(value => value + 1) }}>重试播放</button><button type="button" onClick={() => void copyDiagnostic()}>复制播放诊断</button>{copyStatus && <p role="status">{copyStatus}</p>}</div>}
   </div>
 }
