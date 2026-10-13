@@ -2287,6 +2287,20 @@ async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
 export const SYSTEM_WALLPAPER_MAX_BYTES = 10 * 1024 * 1024
 const systemWallpaperTypes = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
 
+export interface SystemWallpaperSelection { builtinId: string }
+
+export async function fetchSystemWallpaperSelection(signal?: AbortSignal): Promise<SystemWallpaperSelection> {
+  return request<SystemWallpaperSelection>('/api/v1/system/wallpaper/selection', signal)
+}
+
+export async function setSystemWallpaperSelection(builtinId: string): Promise<void> {
+  await requestWithInit<void>('/api/v1/system/wallpaper/selection', {
+    method: 'PUT', credentials: 'same-origin', cache: 'no-store',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
+    body: JSON.stringify({ builtinId }),
+  })
+}
+
 export async function fetchSystemWallpaper(signal?: AbortSignal): Promise<Blob | null> {
   const response = await fetch('/api/v1/system/wallpaper', { credentials: 'same-origin', cache: 'no-store', signal })
   if (response.status === 404) return null

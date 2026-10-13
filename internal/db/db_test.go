@@ -50,6 +50,33 @@ func TestMigrateRejectsNewerSchema(t *testing.T) {
 	}
 }
 
+func TestSchemaNinePreservesExistingCustomWallpaperSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "wallpaper.db")
+	database, err := Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec("DROP TABLE system_wallpaper_state; PRAGMA user_version = 8"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec("INSERT INTO system_assets (asset_id,content_type,content,updated_at) VALUES ('desktop_wallpaper','image/jpeg',x'ffd8ff',1)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	database, err = Open(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	var selection string
+	if err := database.QueryRow("SELECT selection FROM system_wallpaper_state WHERE id=1").Scan(&selection); err != nil || selection != "custom" {
+		t.Fatalf("existing custom wallpaper selection = %q, %v", selection, err)
+	}
+}
+
 func TestMigrateUpgradesVersionOneDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "legacy.db")
 	legacy, err := sql.Open("sqlite", "file:"+path)

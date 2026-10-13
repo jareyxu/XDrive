@@ -18,6 +18,16 @@
 .segment button { padding: 8px 12px; min-width: 68px; border: 1px solid transparent; border-radius: 6px; background: transparent; }
 .segment button[aria-pressed="true"] { background: var(--surface-content); border-color: var(--separator); font-weight: 600; }
 .wallpaperRow { align-items: center; }
+.wallpaperHeading { padding: 18px 0 10px; }
+.wallpaperHeading strong, .wallpaperHeading small { display: block; }
+.wallpaperHeading small { margin-top: 5px; color: var(--label-2); font-size: 13px; line-height: 1.6; }
+.wallpaperGrid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 8px 0 20px; }
+.wallpaperChoice { position: relative; display: flex; min-width: 0; flex-direction: column; overflow: hidden; gap: 7px; padding: 6px; border: 1px solid var(--separator); border-radius: 12px; background: var(--surface-content); color: var(--label-1); text-align: left; }
+.wallpaperChoice:hover { border-color: var(--accent); }
+.wallpaperChoice[aria-pressed="true"] { border: 2px solid var(--accent); padding: 5px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent); }
+.wallpaperChoice img { display: block; width: 100%; aspect-ratio: 16 / 9; border-radius: 7px; background: var(--fill-2); object-fit: cover; }
+.wallpaperChoice > span:first-of-type { overflow: hidden; padding: 0 4px 2px; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.wallpaperSelected { position: absolute; top: 10px; right: 10px; padding: 4px 7px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 92%, #000); color: #fff; font-size: 11px; }
 .wallpaperActions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
 .wallpaperActions :global(.quiet-button) { min-height: 44px; padding: 0 12px; color: var(--label-2); }
 .fileInput { display: none; }
@@ -37,7 +47,7 @@
 .releaseDetails { margin-top: 12px; border-top: 1px solid var(--separator); padding-top: 12px; }
 .releaseDetails summary { cursor: pointer; min-height: 36px; display: flex; align-items: center; color: var(--accent); }
 .releaseDetails pre { max-height: 280px; overflow: auto; margin: 8px 0 0; padding: 12px; border-radius: var(--radius-control); background: var(--fill-2); font: inherit; font-size: 13px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-@media(max-width:760px) { .page { padding: 0 14px 24px; } .settingsLayout { display: block; } .categoryNav { position: sticky; z-index: 2; top: 0; display: flex; overflow-x: auto; margin: 0 -4px; padding: 5px; border-radius: 10px; scrollbar-width: thin; } .categoryNav button { min-width: max-content; min-height: 40px; } .group { padding: 16px; } .row { flex-wrap: wrap; } .wallpaperActions { width: 100%; } .wallpaperPreview { min-height: 120px; } .segment { width: 100%; } .segment button { flex: 1; } }
+@media(max-width:760px) { .page { padding: 0 14px 24px; } .settingsLayout { display: block; } .categoryNav { position: sticky; z-index: 2; top: 0; display: flex; overflow-x: auto; margin: 0 -4px; padding: 5px; border-radius: 10px; scrollbar-width: thin; } .categoryNav button { min-width: max-content; min-height: 40px; } .group { padding: 16px; } .row { flex-wrap: wrap; } .wallpaperActions { width: 100%; } .wallpaperGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; } .wallpaperPreview { min-height: 120px; } .segment { width: 100%; } .segment button { flex: 1; } }
 @media(forced-colors:active) { .segment button[aria-pressed="true"] { border-color: Highlight; } .group, .warning { border: 1px solid CanvasText; } }
 /* Settings owns its single navigation rail; category panels remain mounted. */
 .page { max-width: none; height: 100%; padding: 0; background: var(--surface-content); }

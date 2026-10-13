@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"mime"
@@ -14,6 +15,53 @@ import (
 )
 
 const maxWallpaperBytes = 10 << 20
+
+type wallpaperSelection struct {
+	BuiltinID string `json:"builtinId"`
+}
+
+func getSystemWallpaperSelection(w http.ResponseWriter, r *http.Request, database *db.DB) {
+	var selection string
+	if err := database.QueryRowContext(r.Context(), "SELECT selection FROM system_wallpaper_state WHERE id = 1").Scan(&selection); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, wallpaperSelection{BuiltinID: selection})
+}
+
+func putSystemWallpaperSelection(w http.ResponseWriter, r *http.Request, database *db.DB) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1024)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	var selection wallpaperSelection
+	if err := decoder.Decode(&selection); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	if _, err := decoder.Token(); !errors.Is(err, io.EOF) {
+		writeError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	if !validBuiltinWallpaperID(selection.BuiltinID) {
+		writeError(w, http.StatusBadRequest, "invalid_request")
+		return
+	}
+	if _, err := database.ExecContext(r.Context(), "UPDATE system_wallpaper_state SET selection = ?, updated_at = ? WHERE id = 1", selection.BuiltinID, time.Now().Unix()); err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func validBuiltinWallpaperID(id string) bool {
+	switch id {
+	case "default", "02", "03", "04", "05", "06", "07", "08":
+		return true
+	default:
+		return false
+	}
+}
 
 func getSystemWallpaper(w http.ResponseWriter, r *http.Request, database *db.DB) {
 	var contentType string
@@ -63,9 +111,24 @@ func putSystemWallpaper(w http.ResponseWriter, r *http.Request, database *db.DB)
 		writeError(w, http.StatusBadRequest, "invalid_wallpaper")
 		return
 	}
-	if _, err := database.ExecContext(r.Context(), `INSERT INTO system_assets (asset_id, content_type, content, updated_at)
+	tx, err := database.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), `INSERT INTO system_assets (asset_id, content_type, content, updated_at)
 		VALUES ('desktop_wallpaper', ?, ?, ?)
 		ON CONFLICT(asset_id) DO UPDATE SET content_type = excluded.content_type, content = excluded.content, updated_at = excluded.updated_at`, mediaType, content, time.Now().Unix()); err != nil {
+		_ = tx.Rollback()
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), "UPDATE system_wallpaper_state SET selection = 'custom', updated_at = ? WHERE id = 1", time.Now().Unix()); err != nil {
+		_ = tx.Rollback()
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	if err := tx.Commit(); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
@@ -73,7 +136,22 @@ func putSystemWallpaper(w http.ResponseWriter, r *http.Request, database *db.DB)
 }
 
 func deleteSystemWallpaper(w http.ResponseWriter, r *http.Request, database *db.DB) {
-	if _, err := database.ExecContext(r.Context(), "DELETE FROM system_assets WHERE asset_id = 'desktop_wallpaper'"); err != nil {
+	tx, err := database.BeginTx(r.Context(), nil)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), "DELETE FROM system_assets WHERE asset_id = 'desktop_wallpaper'"); err != nil {
+		_ = tx.Rollback()
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	if _, err := tx.ExecContext(r.Context(), "UPDATE system_wallpaper_state SET selection = 'default', updated_at = ? WHERE id = 1", time.Now().Unix()); err != nil {
+		_ = tx.Rollback()
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	if err := tx.Commit(); err != nil {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}

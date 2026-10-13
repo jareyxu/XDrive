@@ -2,17 +2,18 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v2.0.7",
+    "version": "v2.0.8",
     "reviewedAt": "2026-10-13",
-    "reviewer": "User-authorized v2.0.7 UI and appearance settings release; encrypted formats and SQLite schema unchanged",
+    "reviewer": "User-authorized v2.0.8 UI and built-in wallpaper release; encrypted formats unchanged",
     "evidence": [
-      "The release removes browser preferences for glass clarity and user-controlled transparency reduction, fixes glass appearance at its previous default, and keeps the operating-system reduced-transparency accessibility preference. Desktop/authentication chrome and wallpaper background sizing are adjusted. No server behavior changes.",
-      "The encrypted object envelope, key-slot and vault formats, AAD, encrypted metadata, client mutation protocol, backup container, browser encrypted state, and SQLite schema are unchanged.",
-      "Local full make test passed on 2026-10-13: production frontend checks/build, Go vet/tests, script and contract checks, 572 frontend tests, and three TLS proxy checks. GitHub Actions must still pass for the exact main commit before publication.",
+      "Desktop UI removes the account avatar, softens top-bar separators, swaps transfer-speed and task-pill positions, and aligns the media-preview close control with the file-browser window controls.",
+      "The wallpaper gallery uses bundled public image assets and persists the selected built-in wallpaper in SQLite schema 9. Migration from schema 8 preserves an existing custom wallpaper selection. Wallpaper selection is shared across browsers; the images and selection are not encrypted.",
+      "The encrypted object envelope, key-slot and vault formats, AAD, encrypted metadata, client mutation protocol, backup container, and browser encrypted state are unchanged. Backup snapshots support schema 9.",
+      "Local full make test passed on 2026-10-13: production frontend checks/build, Go vet/tests, shell/install/upgrade/uninstall checks, format and package contracts, 574 frontend tests, and three TLS proxy checks. GitHub Actions must also pass for the exact main commit before publication.",
       "Publication requires full local make test, successful main-branch CI for the exact tagged commit, and GitHub release archive checksum verification."
     ]
   },
-  "scope": "XDrive v2.0.7 refines the desktop and authentication UI, removes ineffective transparency preferences, and makes wallpaper cover sizing explicit; encrypted user-data formats and SQLite schema are unchanged.",
+  "scope": "XDrive v2.0.8 refines top-bar and media-preview controls and adds server-persisted built-in wallpaper selection in SQLite schema 9; encrypted user-data formats are unchanged.",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,
@@ -194,11 +195,11 @@
       ],
       "snapshotSchemaRange": {
         "minimum": 2,
-        "maximum": 8
+        "maximum": 9
       }
     },
     "sqlite": {
-      "currentSchemaVersion": 8,
+      "currentSchemaVersion": 9,
       "migrationPolicy": "forward only; after a schema-changing migration, restore the matching pre-migration database and binary before rollback"
     },
     "clientMutationProtocol": {

@@ -354,8 +354,8 @@ func TestRestoreGenerationStagedPreservesSchemaSevenAndResetsGCProgress(t *testi
 	defer restoredDB.Close()
 	var schemaVersion, generation int
 	var cursor string
-	if err := restoredDB.QueryRow("PRAGMA user_version").Scan(&schemaVersion); err != nil || schemaVersion != 8 {
-		t.Fatalf("schema changed during staged restore: got %d, want 8: %v", schemaVersion, err)
+	if err := restoredDB.QueryRow("PRAGMA user_version").Scan(&schemaVersion); err != nil || schemaVersion != db.CurrentSchemaVersion {
+		t.Fatalf("schema changed during staged restore: got %d, want %d: %v", schemaVersion, db.CurrentSchemaVersion, err)
 	}
 	if err := restoredDB.QueryRow("SELECT cursor,generation FROM object_gc_state WHERE id=1").Scan(&cursor, &generation); err != nil || cursor != "" || generation != 0 {
 		t.Fatalf("staged restore retained an obsolete GC cursor: cursor=%q generation=%d err=%v", cursor, generation, err)
@@ -934,6 +934,9 @@ func TestRestoreSchemaTwoBackupMigratesBeforeActivation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := snapshot.Exec("DROP TABLE system_assets"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := snapshot.Exec("DROP TABLE system_wallpaper_state"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := snapshot.Exec("PRAGMA user_version=2"); err != nil {

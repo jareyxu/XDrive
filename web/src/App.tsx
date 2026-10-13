@@ -37,7 +37,7 @@ import { useLocation, useNavigate } from 'react-router'
 import { browserMutations } from './index/browser-coordination'
 import type { WriterState } from './index/mutation-coordinator'
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, FormEvent, ReactNode } from 'react'
-import { Archive, ArrowDownToLine, ArrowUpFromLine, Bell, ChevronDown, CornerUpLeft, File, FilePenLine, Folder, FolderPlus, HardDrive, LockKeyhole, LogOut, MoveRight, ShieldCheck, Trash2, RotateCcw, LayoutGrid, List, MoreHorizontal, Settings, Square, Minus, Copy, Home, ArrowUp, ArrowDown, X, UserRound } from 'lucide-react'
+import { Archive, ArrowDownToLine, ArrowUpFromLine, Bell, ChevronDown, CornerUpLeft, File, FilePenLine, Folder, FolderPlus, HardDrive, LockKeyhole, LogOut, MoveRight, ShieldCheck, Trash2, RotateCcw, LayoutGrid, List, MoreHorizontal, Settings, Square, Minus, Copy, Home, ArrowUp, ArrowDown, X } from 'lucide-react'
 import {
   APIError,
   SetupCommittedError,
@@ -1636,6 +1636,7 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
   return <main className={`desktop-shell${activeView === 'drive' && zipSelections.size > 0 ? ' has-drive-selection' : ''}`}>
     <header className="desktop-topbar">
       <div className="desktop-topbar-actions">
+        <TransferSpeedIndicator tasks={transferTasks} />
         <TransferPanel
           key={recoverableTransfers.length > 0 ? 'has-recoverable-uploads' : 'no-recoverable-uploads'}
           active={transferTasks}
@@ -1648,7 +1649,6 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
           onAbandon={(recordId) => { const record = resumeRecords.find((item) => item.id === recordId); if (record) void handleAbandonResume(record) }}
           reservedBytes={usage?.uploadReservedBytes ?? usage?.reservedBytes ?? 0}
         />
-        <TransferSpeedIndicator tasks={transferTasks} />
         <div className="desktop-notifications-anchor">
           <button type="button" className="desktop-topbar-button" aria-label={`通知${notificationCount ? `，${notificationCount} 条待处理` : ''}`} aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(value => !value); setReadTransferNotifications(current => new Set([...current, ...recentTransferResults.map(task => task.id)])); setSystemUpdateNotice(current => current ? { ...current, read: true } : null); setAccountMenuOpen(false) }}><Bell size={19} />{notificationCount > 0 && <span className="desktop-badge">{notificationCount > 9 ? '9+' : notificationCount}</span>}</button>
           {notificationsOpen && <section className="desktop-popover notification-popover" aria-label="通知中心">
@@ -1665,7 +1665,7 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
           </section>}
         </div>
         <div className="desktop-account-anchor">
-          <button type="button" className="desktop-account-button" aria-expanded={accountMenuOpen} onClick={() => { setAccountMenuOpen(value => !value); setNotificationsOpen(false) }}><span className="account-avatar"><UserRound size={18} /></span><span>{props.vault.username}</span><ChevronDown size={15} /></button>
+          <button type="button" className="desktop-account-button" aria-expanded={accountMenuOpen} onClick={() => { setAccountMenuOpen(value => !value); setNotificationsOpen(false) }}><span>{props.vault.username}</span><ChevronDown size={15} /></button>
           {accountMenuOpen && <div className="desktop-popover account-popover" role="menu" aria-label="个人账号">
             <div className="account-menu-heading"><strong>{props.vault.username}</strong><span>已解锁</span></div>
             <button role="menuitem" type="button" onClick={() => { setAccountMenuOpen(false); setChangePasswordOpen(true) }}><ShieldCheck size={16} /> 修改密码</button>
@@ -1890,7 +1890,7 @@ function PreviewDialog(props: { preview: PreviewState; vault: UnlockedVault; hol
     if (element && !element.open) element.showModal()
   }, [])
   return <dialog ref={dialog} className="preview-dialog" aria-label={`预览 ${props.preview.entry.name}`} onClose={props.onClose} onCancel={(event) => { event.preventDefault(); props.onClose() }}>
-    <header><strong>{props.preview.entry.name}</strong><button className="quiet-button" onClick={props.onDownload}>下载原文件</button><button className="icon-button" aria-label="关闭预览" onClick={props.onClose}>×</button></header>
+    <header><strong>{props.preview.entry.name}</strong><button className="quiet-button" onClick={props.onDownload}>下载原文件</button><button className="icon-button preview-close-button" aria-label="关闭预览" onClick={props.onClose}><X size={17} /></button></header>
     {props.preview.kind === 'text' && <pre className="preview-text">{props.preview.text}</pre>}
     {props.preview.kind === 'markdown' && <Suspense fallback={<p role="status">正在加载 Markdown 预览…</p>}><MarkdownPreview source={props.preview.text ?? ''} /></Suspense>}
     {props.preview.kind === 'code' && <Suspense fallback={<p role="status">正在加载代码预览…</p>}><CodePreview key={props.preview.entry.entryId} source={props.preview.text ?? ''} name={props.preview.entry.name} mime={props.preview.entry.mime ?? ''} /></Suspense>}

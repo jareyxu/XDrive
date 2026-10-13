@@ -78,6 +78,10 @@ func TestRestoreResetsGCProgressAndMigratesSchemaSix(t *testing.T) {
 				_ = snapshot.Close()
 				t.Fatal(err)
 			}
+			if _, err := snapshot.Exec("DROP TABLE system_wallpaper_state"); err != nil {
+				_ = snapshot.Close()
+				t.Fatal(err)
+			}
 			if err := snapshot.Close(); err != nil {
 				t.Fatal(err)
 			}

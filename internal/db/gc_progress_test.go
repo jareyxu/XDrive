@@ -59,7 +59,7 @@ func TestSchemaSixUpgradePreservesLedgerAndRollbackSnapshot(t *testing.T) {
 	if err := migrated.QueryRow("SELECT cursor,generation FROM object_gc_state WHERE id=1").Scan(&cursor, &generation); err != nil || cursor != "" || generation != 0 {
 		t.Fatalf("migrated cursor: %q %d %v", cursor, generation, err)
 	}
-	if err := migrated.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != 8 {
+	if err := migrated.QueryRow("PRAGMA user_version").Scan(&version); err != nil || version != CurrentSchemaVersion {
 		t.Fatalf("version: %d %v", version, err)
 	}
 	if err := migrated.QueryRow("SELECT vault_mutation_revision FROM server_state WHERE id=1").Scan(&revision); err != nil || revision != 42 {

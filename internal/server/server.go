@@ -268,6 +268,20 @@ func NewWithBuild(cfg config.Config, version, commit string) (*Handler, error) {
 	mux.HandleFunc("GET /api/v1/system/wallpaper", func(w http.ResponseWriter, r *http.Request) {
 		getSystemWallpaper(w, r, database)
 	})
+	mux.HandleFunc("GET /api/v1/system/wallpaper/selection", func(w http.ResponseWriter, r *http.Request) {
+		getSystemWallpaperSelection(w, r, database)
+	})
+	mux.HandleFunc("PUT /api/v1/system/wallpaper/selection", func(w http.ResponseWriter, r *http.Request) {
+		if !sameOrigin(r) {
+			writeError(w, http.StatusForbidden, "origin_rejected")
+			return
+		}
+		if !validSessionAndCSRF(r, database) {
+			writeError(w, http.StatusUnauthorized, "invalid_session")
+			return
+		}
+		putSystemWallpaperSelection(w, r, database)
+	})
 	mux.HandleFunc("PUT /api/v1/system/wallpaper", func(w http.ResponseWriter, r *http.Request) {
 		if !sameOrigin(r) {
 			writeError(w, http.StatusForbidden, "origin_rejected")

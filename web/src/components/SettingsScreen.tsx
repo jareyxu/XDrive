@@ -5,7 +5,8 @@ import { Palette, ArrowUpDown, HardDrive, ShieldCheck, Archive, RefreshCw, Info 
 import { fetchStorageUsage, fetchSystemInfo, fetchSystemUpdateInfo, fetchSystemUpdateStatus, prepareBackupDownload, startSystemUpdate, type StorageUsage, type SystemInfo, type SystemUpdateInfo, type SystemUpdateStatus } from '../api/client'
 import { APIError } from '../api/api-error'
 import { effectiveBackupReminderDays, backupIsOverdue, setPreferences, usePreferences } from '../preferences/preferences'
-import { clearWallpaper, MAX_WALLPAPER_BYTES, saveWallpaper, useWallpaper, WALLPAPER_TYPES } from '../preferences/wallpaper'
+import { clearWallpaper, chooseBuiltinWallpaper, MAX_WALLPAPER_BYTES, saveWallpaper, useWallpaper, WALLPAPER_TYPES } from '../preferences/wallpaper'
+import { BUILTIN_WALLPAPERS } from '../preferences/builtin-wallpapers'
 import styles from './SettingsScreen.module.css'
 
 export function SettingsScreen(props: { now: number; revision: number; onChangePassword: () => void; passwordDisabled: boolean; active?: boolean; onUpdateNotice?: (message: string, isError: boolean) => void; storageContent?: ReactNode; category?: string; onCategoryChange?: (category: string) => void }) {
@@ -153,6 +154,17 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
       if (wallpaperInput.current) wallpaperInput.current.value = ''
     }
   }
+  const chooseBuiltin = async (id: (typeof BUILTIN_WALLPAPERS)[number]['id']) => {
+    setWallpaperError('')
+    setWallpaperBusy(true)
+    try {
+      await chooseBuiltinWallpaper(id)
+    } catch {
+      setWallpaperError('无法将壁纸选择保存到服务器。请检查网络和登录状态后重试。')
+    } finally {
+      setWallpaperBusy(false)
+    }
+  }
   const restoreWallpaper = async () => {
     setWallpaperError('')
     setWallpaperBusy(true)
@@ -177,7 +189,15 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
     <div hidden={activeCategory !== 'storage'} className={styles.storagePanel}>{activeCategory === 'storage' && props.active !== false && props.storageContent}</div>
     <section className={styles.group} hidden={activeCategory !== 'appearance'} aria-labelledby="appearance-title"><h2 id="appearance-title">外观</h2>
       <div className={styles.row}><span id="theme-label">外观模式</span><div className={styles.segment} role="group" aria-labelledby="theme-label">{([['system', '跟随系统'], ['light', '浅色'], ['dark', '深色']] as const).map(([value, label]) => <button key={value} type="button" aria-pressed={preferences.theme === value} onClick={() => setPreferences({ theme: value })}>{label}</button>)}</div></div>
-      <div className={`${styles.row} ${styles.wallpaperRow}`}><div>桌面壁纸<small>未加密保存在服务器，由各浏览器共享；登录页未登录时也可见。请勿上传敏感图片。支持 JPG、PNG、WebP、AVIF，最大 10 MiB。</small></div><div className={styles.wallpaperActions}><input ref={wallpaperInput} className={styles.fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/avif" aria-label="选择桌面壁纸" disabled={wallpaperBusy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void chooseWallpaper(file) }} /><button type="button" className="toolbar-button" disabled={wallpaperBusy} onClick={() => wallpaperInput.current?.click()}>{wallpaperBusy ? '正在保存…' : '上传壁纸'}</button>{wallpaper.url && <button type="button" className="quiet-button" disabled={wallpaperBusy} onClick={() => void restoreWallpaper()}>恢复默认</button>}</div></div>
+      <div className={styles.wallpaperHeading}><div><strong>系统壁纸</strong><small>壁纸图片由服务器提供，选择后立即预览并保存到服务器；登录页和其他浏览器会同步显示。壁纸不加密。</small></div></div>
+      <div className={styles.wallpaperGrid} role="group" aria-label="选择系统壁纸">
+        {BUILTIN_WALLPAPERS.map(item => <button key={item.id} type="button" className={styles.wallpaperChoice} aria-pressed={wallpaper.builtinId === item.id} disabled={wallpaperBusy} onClick={() => void chooseBuiltin(item.id)}>
+          <img src={item.thumbnail} alt="" loading="lazy" />
+          <span>{item.name}</span>
+          {wallpaper.builtinId === item.id && <span className={styles.wallpaperSelected}>当前使用</span>}
+        </button>)}
+      </div>
+      <div className={`${styles.row} ${styles.wallpaperRow}`}><div>自定义壁纸<small>未加密保存在服务器，由各浏览器共享；登录页未登录时也可见。请勿上传敏感图片。支持 JPG、PNG、WebP、AVIF，最大 10 MiB。</small></div><div className={styles.wallpaperActions}><input ref={wallpaperInput} className={styles.fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/avif" aria-label="选择桌面壁纸" disabled={wallpaperBusy} onChange={event => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ''; void chooseWallpaper(file) }} /><button type="button" className="toolbar-button" disabled={wallpaperBusy} onClick={() => wallpaperInput.current?.click()}>{wallpaperBusy ? '正在保存…' : '上传壁纸'}</button>{wallpaper.ready && wallpaper.builtinId !== 'default' && <button type="button" className="quiet-button" disabled={wallpaperBusy} onClick={() => void restoreWallpaper()}>恢复默认</button>}</div></div>
       <div className={styles.wallpaperPreview} role="img" aria-label="桌面壁纸预览" style={wallpaper.url ? { backgroundImage: `url("${wallpaper.url}")` } : undefined}><span>{wallpaper.ready ? 'XDrive 桌面预览' : '正在读取壁纸…'}</span></div>
       {wallpaperError && <p className={styles.wallpaperError} role="alert">{wallpaperError}</p>}
       <div className={styles.row}><label htmlFor="file-view">默认视图</label><select id="file-view" value={preferences.view} onChange={event => setPreferences({ view: event.target.value as 'grid' | 'list' })}><option value="grid">网格</option><option value="list">列表</option></select></div>
