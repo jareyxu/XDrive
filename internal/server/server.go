@@ -86,6 +86,9 @@ func New(cfg config.Config) (*Handler, error) {
 
 // NewWithBuild exposes the version of the actual embedded application binary.
 func NewWithBuild(cfg config.Config, version, commit string) (*Handler, error) {
+	if cfg.UploadConcurrency < 0 || cfg.UploadConcurrency > 64 || cfg.DownloadConcurrency < 0 || cfg.DownloadConcurrency > 64 {
+		return nil, errors.New("transfer concurrency must be between 1 and 64")
+	}
 	if cfg.DiskSafetyBytes < 0 {
 		return nil, fmt.Errorf("disk safety reserve cannot be negative")
 	}
@@ -387,11 +390,32 @@ func NewWithBuild(cfg config.Config, version, commit string) (*Handler, error) {
 		}
 		metadataTransaction(w, r, database, cfg.StoragePath)
 	})
+	uploadLimit, downloadLimit := cfg.UploadConcurrency, cfg.DownloadConcurrency
+	// Direct embedders predating these optional settings retain safe defaults.
+	if uploadLimit == 0 {
+		uploadLimit = 4
+	}
+	if downloadLimit == 0 {
+		downloadLimit = 8
+	}
+	uploads, downloads := make(chan struct{}, uploadLimit), make(chan struct{}, downloadLimit)
+	mux.HandleFunc("GET /api/v1/transfers/capabilities", func(w http.ResponseWriter, r *http.Request) {
+		if !validSession(r, database) {
+			writeError(w, http.StatusUnauthorized, "invalid_session")
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		writeJSON(w, http.StatusOK, map[string]int{"uploadConcurrency": uploadLimit, "downloadConcurrency": downloadLimit})
+	})
 	mux.HandleFunc("GET /api/v1/objects/{id}", func(w http.ResponseWriter, r *http.Request) {
 		if !validSession(r, database) {
 			writeError(w, http.StatusUnauthorized, "invalid_session")
 			return
 		}
+		if !admitTransfer(w, downloads) {
+			return
+		}
+		defer func() { <-downloads }()
 		readObject(w, r, database, cfg.StoragePath)
 	})
 	mux.HandleFunc("POST /api/v1/uploads", func(w http.ResponseWriter, r *http.Request) {
@@ -432,6 +456,10 @@ func NewWithBuild(cfg config.Config, version, commit string) (*Handler, error) {
 			writeError(w, http.StatusUnauthorized, "invalid_session")
 			return
 		}
+		if !admitTransfer(w, uploads) {
+			return
+		}
+		defer func() { <-uploads }()
 		putUploadObject(w, r, database, cfg.StoragePath, cfg.DiskSafetyBytes, cfg.ObjectPutMaxBytes, handler.uploadPublishedHook, handler.uploadReceiveTimeout)
 	})
 	mux.HandleFunc("DELETE /api/v1/uploads/{id}/objects/{objectId}", func(w http.ResponseWriter, r *http.Request) {
@@ -762,4 +790,16 @@ func newRequestID() string {
 		return fmt.Sprintf("%x", id[:])
 	}
 	return fmt.Sprintf("%x-%x", time.Now().UTC().UnixNano(), requestCounter.Add(1))
+}
+
+// Reject before reading a PUT body or obtaining its claim. No server wait queue.
+func admitTransfer(w http.ResponseWriter, slots chan struct{}) bool {
+	select {
+	case slots <- struct{}{}:
+		return true
+	default:
+		w.Header().Set("Retry-After", "1")
+		writeError(w, http.StatusServiceUnavailable, "transfer_busy")
+		return false
+	}
 }

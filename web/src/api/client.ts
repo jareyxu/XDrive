@@ -1,3 +1,8 @@
+import { TransferGate } from '../transfers/scheduler'
+import { uploadRequest } from '../transfers/upload-request'
+import { prefetchChunks } from '../transfers/prefetch'
+import { downloadBuffers, downloadDepth, downloadNetwork, uploadNetwork, uploadPipeline, refreshTransferCapabilities, uploadAdaptive, downloadAdaptive } from '../transfers/policy'
+import { recordNetworkBytes } from '../transfers/network-meter'
 import { APIError, parseAPIError } from './api-error'
 export { APIError } from './api-error'
 import { CLIENT_PROTOCOL_VERSION } from './protocol'
@@ -44,7 +49,7 @@ import type { RevisionObservation, RollbackFinding } from '../security/revision-
 
 import { createChunkRangeReader, type RangeReaderOptions } from '../media/chunk-range-reader'
 import { ConcurrentMutationRetryExhaustedError, retryTraversalMutation } from '../index/traversal-retry'
-import { NetworkUnavailableError, retryNetworkRequest } from './network-retry'
+import { NetworkUnavailableError, TransferBusyError, retryNetworkRequest } from './network-retry'
 
 let csrfToken = ''
 let revisionScope: string | null = null
@@ -936,6 +941,7 @@ async function uploadFileCore(
   signal?: AbortSignal,
   recovery?: UploadResumeRecord,
   choice?: UploadConflictChoice,
+  commitGate?: TransferGate,
 ): Promise<{ vault: UnlockedVault; directory: DirectoryState }> {
   const name = file.name.normalize('NFC')
   const targetName = recovery?.targetName ?? choice?.targetName ?? name
@@ -1099,7 +1105,8 @@ async function uploadFileCore(
     }
     // Capture the preference once. Admission covers plaintext and encryption as
     // well as PUT, so large inputs cannot queue unbounded encrypted buffers.
-    await runBoundedTasks(chunkCount, currentUploadConcurrency(), async (index, chunkSignal) => {
+    await refreshTransferCapabilities(signal)
+    await runBoundedTasks(chunkCount, currentUploadConcurrency(), async (index, chunkSignal) => uploadPipeline.run(async () => {
       if (!record) throw new Error('Upload recovery record missing')
       const prior = record.chunks[index]
       const persisted = prior ? uploaded.get(prior.objectId) : undefined
@@ -1145,11 +1152,11 @@ async function uploadFileCore(
       } finally {
         plaintext?.fill(0); aad?.fill(0); encrypted?.fill(0)
       }
-    }, signal)
+    }, chunkSignal), signal)
 
     const isCommitConflict = (error: unknown) => error instanceof APIError && error.status === 409 && ['vault_mutation_conflict', 'global_revision_conflict', 'metadata_revision_conflict'].includes(error.code)
     onProgress(completed, totalSteps, { phase: 'committing', completedBytes: uploadedContentBytes, totalBytes: file.size })
-    return await retryTraversalMutation(async () => {
+    const commit = () => retryTraversalMutation(async () => {
       if (!record) throw new Error('Upload recovery record missing')
       status = await request<UploadStatus>(`/api/v1/uploads/${encodeURIComponent(uploadId)}`, signal)
       uploadedObjectIds.length = chunkCount
@@ -1290,6 +1297,7 @@ async function uploadFileCore(
         throw error
       }
     }, isCommitConflict, signal)
+    return await (commitGate ? commitGate.run(commit, signal) : commit())
   } catch (error) {
     // A semantic conflict has no committed transaction. Discard its encrypted
     // recovery record only after the server acknowledges release of the session.
@@ -1363,17 +1371,17 @@ async function uploadFolderCore(
       }
     }
     vault = checked.vault; destination = checked.destination
-    const ensureChildFolder = async (parent: DirectoryState, name: string): Promise<DirectoryState> => {
+    const ensureChildFolder = async (parent: DirectoryState, name: string, operationSignal = signal): Promise<DirectoryState> => {
       let child = parent.entries.find((entry) => entry.name === name)
       if (child && child.kind !== 'folder') throw new TypeError(`路径“${name}”与现有文件冲突。`)
       if (!child) {
-        const created = await createFolderCore(vault, parent, name, signal)
+        const created = await createFolderCore(vault, parent, name, operationSignal)
         vault = created.vault; parent = created.directory
         if (parent.indexId === destination.indexId) destination = parent
         child = parent.entries.find((entry) => entry.name === name)
       }
       if (!child?.childIndexId) throw new TypeError(`无法打开文件夹“${name}”。`)
-      return loadDirectory(vault, child.childIndexId, [...parent.path, { indexId: parent.indexId, name }], signal)
+      return loadDirectory(vault, child.childIndexId, [...parent.path, { indexId: parent.indexId, name }], operationSignal)
     }
     let restart = false
     for (const replacement of [...plan.folderReplacements].sort((a, b) => a.path.split('/').length - b.path.split('/').length)) {
@@ -1397,47 +1405,62 @@ async function uploadFolderCore(
     }
     if (restart) continue
     for (const path of plan.skippedPaths) { remaining.delete(path); skippedFiles += 1; processedFiles += 1; onProgress(processedFiles, files.length) }
-    for (const record of plan.records) {
-      throwIfAborted(signal)
-      try {
-        // Another device can mutate while this page owns its local Web Lock.
-        // Read actual paths/entries for every file; only completed files persist.
-        vault = await refreshVaultFromServer(vault, signal)
-        destination = await locateActiveDirectory(vault, destination, signal)
-        let parent = destination
-        for (const name of record.segments.slice(0, -1)) parent = await ensureChildFolder(parent, name)
-        const current = parent.entries.find((entry) => entry.name === record.targetName) as ConflictEntry | undefined
-        if (conflictIdentity(current ?? null) !== conflictIdentity(record.expected)) throw new UploadConflictChangedError()
-        const result = await uploadFileCore(vault, record.file, parent, (_steps, _total, progress) => {
-          if (progress) onProgress(processedFiles, files.length, {
-            phase: progress.phase,
-            completedBytes: committedPlaintextBytes + progress.completedBytes,
-            totalBytes: totalPlaintextBytes,
-            currentFileName: record.file.name,
-          })
-        }, signal, undefined, {
-          targetName: record.targetName, ...(record.expected ? { replaceEntryId: record.expected.entryId, expectedReplacementIdentity: conflictIdentity(record.expected) } : {}),
-        })
-        vault = result.vault
-        remaining.delete(record.sourcePath); completedFiles += 1; processedFiles += 1
-        committedPlaintextBytes += record.file.size
-        onProgress(processedFiles, files.length, { phase: 'uploading', completedBytes: committedPlaintextBytes, totalBytes: totalPlaintextBytes, currentFileName: record.file.name })
-      } catch (error) {
-        if (error instanceof DOMException && error.name === 'AbortError') throw error
-        if (error instanceof ConcurrentMutationRetryExhaustedError) throw error
-        if (error instanceof UploadConflictChangedError) {
-          if (++rechecks >= 4) throw new TypeError('目标目录持续出现新冲突，已停止上传；已完成文件保留，请重新选择剩余文件。')
-          restart = true; break
-        }
-        failures.push(`${record.sourcePath}: ${error instanceof Error ? error.message : '上传失败'}`)
-        remaining.delete(record.sourcePath); processedFiles += 1
-        onProgress(processedFiles, files.length)
-        if (error instanceof APIError && ['quota_exceeded', 'disk_space_low', 'vault_mutation_conflict', 'global_revision_conflict', 'metadata_revision_conflict'].includes(error.code)) {
-          if (['quota_exceeded', 'disk_space_low'].includes(error.code)) capacityFailure = { code: error.code, shortfallBytes: error.shortfallBytes }
-          remaining.clear(); break
+    const metadataGate = new TransferGate(() => 1)
+    const progressByFile = new Map<string, number>()
+    let nextFile = 0
+    let stopBatch = false
+    await runBoundedTasks(2, Math.min(2, currentUploadConcurrency()), async (_worker, batchSignal) => {
+      while (nextFile < plan.records.length && !restart && !stopBatch) {
+        const record = plan.records[nextFile++]!
+        batchSignal.throwIfAborted()
+        try {
+          // Another device can mutate while this page owns its local Web Lock.
+          // Read actual paths/entries for every file; only completed files persist.
+          const prepared = await metadataGate.run(async () => {
+            vault = await refreshVaultFromServer(vault, batchSignal)
+            destination = await locateActiveDirectory(vault, destination, batchSignal)
+            let parent = destination
+            for (const name of record.segments.slice(0, -1)) parent = await ensureChildFolder(parent, name, batchSignal)
+            const current = parent.entries.find((entry) => entry.name === record.targetName) as ConflictEntry | undefined
+            if (conflictIdentity(current ?? null) !== conflictIdentity(record.expected)) throw new UploadConflictChangedError()
+            return { vault, parent }
+          }, batchSignal)
+          const result = await uploadFileCore(prepared.vault, record.file, prepared.parent, (_steps, _total, progress) => {
+            if (progress) {
+              progressByFile.set(record.sourcePath, progress.completedBytes)
+              onProgress(processedFiles, files.length, {
+                phase: progress.phase,
+                completedBytes: committedPlaintextBytes + [...progressByFile.values()].reduce((a, b) => a + b, 0),
+                totalBytes: totalPlaintextBytes,
+                currentFileName: record.file.name,
+              })
+            }
+          }, batchSignal, undefined, {
+            targetName: record.targetName, ...(record.expected ? { replaceEntryId: record.expected.entryId, expectedReplacementIdentity: conflictIdentity(record.expected) } : {}),
+          }, metadataGate)
+          progressByFile.delete(record.sourcePath)
+          vault = result.vault
+          remaining.delete(record.sourcePath); completedFiles += 1; processedFiles += 1
+          committedPlaintextBytes += record.file.size
+          onProgress(processedFiles, files.length, { phase: 'uploading', completedBytes: committedPlaintextBytes + [...progressByFile.values()].reduce((a, b) => a + b, 0), totalBytes: totalPlaintextBytes, currentFileName: record.file.name })
+        } catch (error) {
+          progressByFile.delete(record.sourcePath)
+          if (error instanceof DOMException && error.name === 'AbortError') throw error
+          if (error instanceof ConcurrentMutationRetryExhaustedError) throw error
+          if (error instanceof UploadConflictChangedError) {
+            if (++rechecks >= 4) throw new TypeError('目标目录持续出现新冲突，已停止上传；已完成文件保留，请重新选择剩余文件。')
+            restart = true; return
+          }
+          failures.push(`${record.sourcePath}: ${error instanceof Error ? error.message : '上传失败'}`)
+          remaining.delete(record.sourcePath); processedFiles += 1
+          onProgress(processedFiles, files.length)
+          if (error instanceof APIError && ['quota_exceeded', 'disk_space_low', 'vault_mutation_conflict', 'global_revision_conflict', 'metadata_revision_conflict'].includes(error.code)) {
+            if (['quota_exceeded', 'disk_space_low'].includes(error.code)) capacityFailure = { code: error.code, shortfallBytes: error.shortfallBytes }
+            remaining.clear(); stopBatch = true; return
+          }
         }
       }
-    }
+    }, signal)
     if (restart) continue
   }
   vault = await refreshVaultFromServer(vault, signal)
@@ -1751,14 +1774,16 @@ export async function downloadFile(
     if (entry.size > 512 * 1024 * 1024 && !writable) throw new TypeError('此文件超过当前浏览器安全内存下载上限。')
     destination = writable ? openAbortableOutput(writable, signal) : undefined
     writer = destination?.stream.getWriter()
-    reader = await createEncryptedRangeReader(vault, entry, signal, onNetworkWaiting)
-    for (let offset = 0; offset < reader.length; offset += FILE_CHUNK_BYTES) {
+    await refreshTransferCapabilities(signal)
+    reader = await createEncryptedRangeReader(vault, entry, signal, onNetworkWaiting, { cacheChunks: 0, concurrency: downloadDepth() })
+    let offset = 0
+    for await (const plaintext of prefetchChunks(reader, FILE_CHUNK_BYTES, downloadDepth(), downloadBuffers, signal)) {
       throwIfAborted(signal)
-      const plaintext = await reader.readRange(offset, Math.min(reader.length, offset + FILE_CHUNK_BYTES), signal)
       if (writer) {
         try { await writer.write(plaintext) } finally { plaintext.fill(0) }
       } else { plaintextParts.push(plaintext) }
-      onProgress(Math.min(reader.length, offset + Math.min(FILE_CHUNK_BYTES, reader.length - offset)), reader.length)
+      offset += plaintext.byteLength
+      onProgress(offset, reader.length)
     }
     throwIfAborted(signal)
     if (writer) {
@@ -1848,6 +1873,7 @@ async function writeZipSelection(
   const memory = fallbackLimit === undefined ? undefined : createBoundedBlobOutput(fallbackLimit, 'application/zip', signal)
   const output = destination?.stream ?? memory!.stream
   const writer = new ZipWriter(output, { zip64: true, level: 0, useWebWorkers: false, useCompressionStream: false, signal })
+  await refreshTransferCapabilities(signal)
   let writtenPlaintextBytes = 0
   try {
     for (const item of archiveItems) {
@@ -1857,32 +1883,22 @@ async function writeZipSelection(
         continue
       }
       const entry = item.entry!
-      const reader = await createEncryptedRangeReader(vault, entry, signal, onNetworkWaiting)
-      let offset = 0
+      const reader = await createEncryptedRangeReader(vault, entry, signal, onNetworkWaiting, { cacheChunks: 0, concurrency: downloadDepth() })
+      const chunks = prefetchChunks(reader, FILE_CHUNK_BYTES, downloadDepth(), downloadBuffers, signal)
       const stream = new ReadableStream<Uint8Array>({
         async pull(controller) {
           try {
             throwIfAborted(signal)
-            if (offset >= reader.length) {
-              reader.destroy()
-              controller.close()
-              return
-            }
-            const end = Math.min(reader.length, offset + FILE_CHUNK_BYTES)
-            const chunk = await reader.readRange(offset, end, signal)
-            offset = end
-            controller.enqueue(chunk)
-            if (offset >= reader.length) {
-              reader.destroy()
-              controller.close()
-            }
+            const result = await chunks.next()
+            if (result.done) { reader.destroy(); controller.close(); return }
+            controller.enqueue(result.value)
           } catch (error) {
             reader.destroy()
             controller.error(error)
           }
         },
-        cancel() { reader.destroy() },
-      })
+        async cancel() { reader.destroy(); await chunks.return(undefined) },
+      }, { highWaterMark: 0 })
       try {
         await writer.add(item.path, stream, {
           zip64: true,
@@ -1896,6 +1912,7 @@ async function writeZipSelection(
         })
       } finally {
         reader.destroy()
+        await chunks.return(undefined)
       }
       writtenPlaintextBytes += entry.size ?? 0
       onProgress(writtenPlaintextBytes, totalPlaintextBytes)
@@ -2294,10 +2311,15 @@ export async function deleteSystemWallpaper(): Promise<void> {
 }
 
 async function requestArrayBuffer(path: string, maxBytes = 16 * 1024 * 1024, signal?: AbortSignal, onNetworkWaiting: (waiting: boolean) => void = () => undefined, onProgress?: (receivedBytes: number, totalBytes: number) => void): Promise<ArrayBuffer> {
-  return retryNetworkRequest(async () => {
+  return retryNetworkRequest(() => downloadNetwork.run(async () => {
     let response: Response
     try { response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', signal }) }
     catch (error) { if (signal?.aborted) throw error; throw new NetworkUnavailableError(error) }
+    if (response.status === 503 && response.headers.get('Retry-After')) {
+      await response.body?.cancel()
+      downloadAdaptive.congested()
+      throw new TransferBusyError()
+    }
     if (!response.ok) throw await parseAPIError(response)
     const header = response.headers.get('Content-Length')
     const contentLength = header === null ? NaN : Number(header)
@@ -2321,6 +2343,8 @@ async function requestArrayBuffer(path: string, maxBytes = 16 * 1024 * 1024, sig
         if (result.done) break
         if (result.value.byteLength > contentLength - offset) throw new TypeError('encrypted object size does not match its response header')
         buffer.set(result.value, offset)
+        recordNetworkBytes('download', result.value.byteLength)
+        downloadAdaptive.observe(result.value.byteLength)
         offset += result.value.byteLength
         onProgress?.(offset, contentLength)
       }
@@ -2332,7 +2356,7 @@ async function requestArrayBuffer(path: string, maxBytes = 16 * 1024 * 1024, sig
       await reader.cancel(error).catch(() => undefined)
       throw error
     } finally { signal?.removeEventListener('abort', cancel); reader.releaseLock() }
-  }, signal, onNetworkWaiting)
+  }, signal), signal, onNetworkWaiting)
 }
 
 async function post<T = void>(path: string, value: unknown, withCSRF = false, idempotencyKey?: string, signal?: AbortSignal): Promise<T> {
@@ -2350,18 +2374,21 @@ async function putEncryptedObject(uploadId: string, objectId: string, encrypted:
   assertRevisionWritable(`/api/v1/uploads/${uploadId}/objects/${objectId}`)
   const mutationSignal = await browserMutations.guard(requireMutationScope())
   signal = signal ? AbortSignal.any([signal, mutationSignal]) : mutationSignal
-  const response = await retryNetworkRequest(async () => {
+  const response = await retryNetworkRequest(() => uploadNetwork.run(async () => {
+    let result: Response
     try {
-      return await fetch(`/api/v1/uploads/${encodeURIComponent(uploadId)}/objects/${encodeURIComponent(objectId)}`, {
-        method: 'PUT',
-        credentials: 'same-origin',
-        cache: 'no-store',
-        headers: { 'X-CSRF-Token': csrfToken, 'X-XDrive-Client-Protocol': CLIENT_PROTOCOL_VERSION, 'X-XDrive-Object-Size': String(encrypted.byteLength), 'X-XDrive-Ciphertext-SHA256': digest },
-        body: encrypted.slice().buffer as ArrayBuffer,
-        signal,
-      })
+      result = await uploadRequest(`/api/v1/uploads/${encodeURIComponent(uploadId)}/objects/${encodeURIComponent(objectId)}`, {
+        'X-CSRF-Token': csrfToken, 'X-XDrive-Client-Protocol': CLIENT_PROTOCOL_VERSION,
+        'X-XDrive-Object-Size': String(encrypted.byteLength), 'X-XDrive-Ciphertext-SHA256': digest,
+      }, encrypted, signal)
     } catch (error) { if (signal?.aborted) throw error; throw new NetworkUnavailableError(error) }
-  }, signal, onNetworkWaiting)
+    if (result.status === 503 && result.headers.get('Retry-After')) {
+      await result.body?.cancel()
+      uploadAdaptive.congested()
+      throw new TransferBusyError()
+    }
+    return result
+  }, signal), signal, onNetworkWaiting)
   if (!response.ok) throw await parseAPIError(response)
 }
 

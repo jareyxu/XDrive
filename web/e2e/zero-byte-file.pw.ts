@@ -44,12 +44,13 @@ test('zero-byte files commit an empty chunk manifest and round-trip in each brow
     await page.locator('input[type="file"]:not([webkitdirectory])').first().setInputFiles({
       name: 'empty.bin', mimeType: 'application/octet-stream', buffer: Buffer.alloc(0),
     })
-    await expect(page.getByRole('button', { name: 'empty.bin', exact: true })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByRole('button', { name: 'empty.bin', exact: true }).and(page.locator('button:not(.folder-tree-name)'))).toBeVisible({ timeout: 30_000 })
     const manifests = await page.evaluate(() => (window as Window & { xdriveManifestProbe?: unknown[] }).xdriveManifestProbe ?? [])
     expect(manifests).toHaveLength(1)
     expect(manifests[0]).toMatchObject({ version: 3, fileCryptoVersion: 2, size: 0, chunkSize: 8 * 1024 * 1024, chunkCount: 0, chunks: [], thumbnail: null })
 
-    await page.getByRole('button', { name: '下载 empty.bin', exact: true }).click()
+    await page.getByRole('button', { name: '更多操作 empty.bin', exact: true }).click()
+    await page.getByRole('button', { name: '下载 empty.bin', exact: true }).and(page.locator('button:not(.folder-tree-name)')).click()
     await expect(page.getByRole('status')).toContainText('文件已保存。')
     const saved = await page.evaluate(() => (window as Window & { xdriveSaveProbe?: { bytes: number; writes: number; closed: boolean } }).xdriveSaveProbe)
     expect(saved).toEqual({ bytes: 0, writes: 0, closed: true })

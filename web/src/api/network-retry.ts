@@ -5,6 +5,8 @@ export class NetworkUnavailableError extends Error {
   }
 }
 
+export class TransferBusyError extends NetworkUnavailableError {}
+
 /** Keeps an idempotent object transfer alive across brief offline periods. */
 export async function retryNetworkRequest<T>(
   operation: () => Promise<T>,
@@ -13,6 +15,7 @@ export async function retryNetworkRequest<T>(
 ): Promise<T> {
   let attempt = 0
   let announcedWaiting = false
+  let busyAttempts = 0
   const announce = (waiting: boolean) => {
     if (announcedWaiting === waiting) return
     announcedWaiting = waiting
@@ -33,7 +36,10 @@ export async function retryNetworkRequest<T>(
       } catch (error) {
         if (!(error instanceof NetworkUnavailableError)) throw error
         announce(true)
-        const delay = Math.min(5000, 250 * 2 ** Math.min(attempt, 5))
+        if (error instanceof TransferBusyError && ++busyAttempts > 8) throw new Error('服务器持续繁忙，请稍后重试传输。')
+        const delay = error instanceof TransferBusyError
+          ? Math.min(10_000, 1000 * 2 ** Math.min(busyAttempts - 1, 3)) + Math.random() * 500
+          : Math.min(5000, 250 * 2 ** Math.min(attempt, 5))
         attempt += 1
         await waitForNetwork(signal, delay)
       }

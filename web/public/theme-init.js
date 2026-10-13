@@ -2,7 +2,7 @@
 (() => {
   'use strict'
   const key = 'xdrive.preferences.v1'
-  const defaults = { theme: 'system', clarity: 0.5, reduceTransparency: false, backupReminderDays: 30, uploadConcurrency: 2, view: 'grid' }
+  const defaults = { theme: 'system', clarity: 0.5, reduceTransparency: false, backupReminderDays: 30, uploadConcurrency: 4, downloadConcurrency: 4, downloadMemoryMiB: 64, autoTransfer: true, view: 'grid' }
   const normalize = value => {
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
     return Object.freeze({
@@ -11,7 +11,10 @@
       reduceTransparency: typeof source.reduceTransparency === 'boolean' ? source.reduceTransparency : defaults.reduceTransparency,
       backupReminderDays: Number.isInteger(source.backupReminderDays) && source.backupReminderDays >= 1 && source.backupReminderDays <= 365 ? source.backupReminderDays : defaults.backupReminderDays,
       view: ['grid', 'list'].includes(source.view) ? source.view : defaults.view,
-      uploadConcurrency: Number.isInteger(source.uploadConcurrency) && source.uploadConcurrency >= 2 && source.uploadConcurrency <= 4 ? source.uploadConcurrency : defaults.uploadConcurrency,
+      uploadConcurrency: Number.isInteger(source.uploadConcurrency) && source.uploadConcurrency >= 1 && source.uploadConcurrency <= 8 ? source.uploadConcurrency : defaults.uploadConcurrency,
+      downloadConcurrency: Number.isInteger(source.downloadConcurrency) && source.downloadConcurrency >= 1 && source.downloadConcurrency <= 8 ? source.downloadConcurrency : defaults.downloadConcurrency,
+      downloadMemoryMiB: [64, 128, 256].includes(source.downloadMemoryMiB) ? source.downloadMemoryMiB : defaults.downloadMemoryMiB,
+      autoTransfer: typeof source.autoTransfer === 'boolean' ? source.autoTransfer : defaults.autoTransfer,
     })
   }
   const parse = raw => {

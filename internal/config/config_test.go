@@ -387,3 +387,27 @@ func TestBackupWarnAfterDaysConfiguration(t *testing.T) {
 		t.Fatalf("override: %+v %v", cfg, err)
 	}
 }
+
+func TestTransferConcurrencyLimits(t *testing.T) {
+	for _, key := range []string{"XDRIVE_UPLOAD_CONCURRENCY", "XDRIVE_DOWNLOAD_CONCURRENCY"} {
+		t.Run(key, func(t *testing.T) {
+			for _, value := range []string{"0", "65", "-1", "1.5"} {
+				t.Setenv(key, value)
+				if _, err := Load(""); err == nil {
+					t.Errorf("accepted %s=%s", key, value)
+				}
+			}
+			t.Setenv(key, "32")
+			cfg, err := Load("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if key == "XDRIVE_UPLOAD_CONCURRENCY" && cfg.UploadConcurrency != 32 {
+				t.Fatal("upload override ignored")
+			}
+			if key == "XDRIVE_DOWNLOAD_CONCURRENCY" && cfg.DownloadConcurrency != 32 {
+				t.Fatal("download override ignored")
+			}
+		})
+	}
+}

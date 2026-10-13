@@ -5,8 +5,8 @@ export interface ChunkRangeReader {
 }
 
 export interface RangeReaderOptions {
-  cacheChunks?: 1 | 2 | 3 | 4
-  concurrency?: 1 | 2
+  cacheChunks?: 0 | 1 | 2 | 3 | 4
+  concurrency?: number
 }
 
 const abortError = () => new DOMException('Range reader closed or cancelled', 'AbortError')
@@ -23,7 +23,7 @@ export function createChunkRangeReader(
   const lifetime = new AbortController()
   const cacheChunks = options.cacheChunks ?? 4
   const concurrency = options.concurrency ?? 2
-  if (![1, 2, 3, 4].includes(cacheChunks) || ![1, 2].includes(concurrency)) throw new RangeError('Invalid range reader budget')
+  if (![0, 1, 2, 3, 4].includes(cacheChunks) || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) throw new RangeError('Invalid range reader budget')
   const ranges = new Gate(concurrency, 32)
   const loads = new Gate(concurrency, 32)
   type Entry = { bytes?: Uint8Array; promise: Promise<Uint8Array>; controller: AbortController; users: number }
@@ -57,7 +57,7 @@ export function createChunkRangeReader(
           lifetime.signal.throwIfAborted()
           if (bytes.byteLength !== Math.min(chunkSize, length - index * chunkSize)) throw new TypeError('Invalid plaintext chunk length')
           // Consumers pin buffers until their synchronous copy finishes.
-          while (cache.size >= cacheChunks) {
+          while (cacheChunks > 0 && cache.size >= cacheChunks) {
             const victim = [...cache].find(([, item]) => item.users === 0)
             if (!victim) throw new Error('All chunk cache slots are pinned')
             victim[1].bytes?.fill(0)
@@ -86,6 +86,10 @@ export function createChunkRangeReader(
       copy(bytes)
     } finally {
       entry.users -= 1
+      if (cacheChunks === 0 && entry.users === 0 && entry.bytes) {
+        entry.bytes.fill(0)
+        cache.delete(index)
+      }
       if (entry.users === 0 && !entry.bytes) {
         entry.controller.abort(abortError())
         if (pending.get(index) === entry) pending.delete(index)

@@ -1,7 +1,7 @@
 /** Starts only a bounded number of whole read/encrypt/write-ahead/PUT tasks.
  * On the first failure stop admission, abort siblings and await their cleanup. */
 export async function runBoundedTasks(count: number, concurrency: number, task: (index: number, signal: AbortSignal) => Promise<void>, signal?: AbortSignal): Promise<void> {
-  if (!Number.isSafeInteger(count) || count < 0 || count > 4096 || !Number.isInteger(concurrency) || concurrency < 2 || concurrency > 4) throw new RangeError('invalid bounded upload schedule')
+  if (!Number.isSafeInteger(count) || count < 0 || count > 4096 || !Number.isInteger(concurrency) || concurrency < 1 || concurrency > 8) throw new RangeError('invalid bounded upload schedule')
   const controller = new AbortController()
   const operation = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal
   let cursor = 0

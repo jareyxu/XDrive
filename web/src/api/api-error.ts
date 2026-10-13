@@ -54,6 +54,7 @@ const errorMessages: Readonly<Record<string, string>> = {
   service_closing: '服务器正在关闭或重启。请等待服务恢复后重试。',
   setup_conflict: '首次设置发生冲突，尚未完成。请刷新页面查看当前状态；若仍显示未初始化，可重新提交，持续失败时请联系管理员并提供请求编号。',
   setup_unavailable: '首次设置入口当前不可用，设置链接可能无效、已过期或设置已完成。请刷新确认账号状态；若仍显示未初始化，请联系管理员重新生成设置链接。',
+  transfer_busy: '服务器当前传输任务较多，系统正在稍后重试；若持续繁忙，请等片刻后再开始传输。',
   storage_unavailable: '文件存储暂时不可用，此操作未完成。请稍后重试；若持续发生，请提供请求编号。',
   tombstone_build_unavailable: '回收站内容已变化或暂不可用。请刷新回收站并重新选择项目。',
   tombstone_member_unavailable: '所选回收站内容已变化。请刷新回收站后重新操作。',

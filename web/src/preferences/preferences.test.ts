@@ -32,7 +32,7 @@ test.each(['invalid json', '[]', 'null', JSON.stringify({ theme: 'bad', clarity:
 test('only whitelisted non-sensitive fields persist; subscribers and cross-tab invalidation work', () => {
   const state = boot(); const notify = vi.fn(); const stop = state.store.subscribe(notify)
   state.store.set({ theme: 'dark', clarity: 1, vaultKey: 'must-not-persist', fileName: 'private' } as Partial<Preferences>)
-  expect(Object.keys(JSON.parse(state.saved()!))).toEqual(['theme', 'clarity', 'reduceTransparency', 'backupReminderDays', 'view', 'uploadConcurrency'])
+  expect(Object.keys(JSON.parse(state.saved()!))).toEqual(['theme', 'clarity', 'reduceTransparency', 'backupReminderDays', 'view', 'uploadConcurrency', 'downloadConcurrency', 'downloadMemoryMiB', 'autoTransfer'])
   expect(state.saved()).not.toMatch(/must-not-persist|private/u)
   expect(state.dataset.theme).toBe('dark'); expect(notify).toHaveBeenCalledTimes(1)
   state.events.get('storage')!({ key: 'other-sensitive-key', newValue: null }); expect(notify).toHaveBeenCalledTimes(1)
@@ -63,9 +63,9 @@ test('backup threshold changes actual overdue status and uses milliseconds, incl
  expect(backupIsOverdue(now - 7 * day - 1, now, 7)).toBe(true)
 })
 
-test.each([0, 1, 5, 2.5, '4', null])('invalid upload concurrency %s is rejected before scheduling', value => {
+test.each([0, 9, 2.5, '4', null])('invalid upload concurrency %s is rejected before scheduling', value => {
  const state = boot(JSON.stringify({ uploadConcurrency: value }))
- expect(state.store.getSnapshot().uploadConcurrency).toBe(2)
+ expect(state.store.getSnapshot().uploadConcurrency).toBe(4)
 })
 
 test('grid is the default and only grid/list view preferences persist', () => {
@@ -81,4 +81,13 @@ test('server backup warning cannot be deferred by browser preferences; a shorter
  expect(backupIsOverdue(0, 2*86400000, effectiveBackupReminderDays(2,90))).toBe(false)
  expect(backupIsOverdue(0, 2*86400000+1, effectiveBackupReminderDays(2,90))).toBe(true)
  for (const value of [0,-1,1.5,3651,NaN]) expect(() => effectiveBackupReminderDays(value,30)).toThrow()
+})
+
+test('transfer controls persist within validated resource budgets', () => {
+ const state = boot()
+ expect(state.store.getSnapshot()).toMatchObject({ autoTransfer: true, uploadConcurrency: 4, downloadConcurrency: 4, downloadMemoryMiB: 64 })
+ state.store.set({ autoTransfer: false, uploadConcurrency: 8, downloadConcurrency: 8, downloadMemoryMiB: 256 })
+ expect(boot(state.saved()).store.getSnapshot()).toMatchObject({ autoTransfer: false, uploadConcurrency: 8, downloadConcurrency: 8, downloadMemoryMiB: 256 })
+ state.store.set({ downloadConcurrency: Infinity, downloadMemoryMiB: 99999 })
+ expect(state.store.getSnapshot()).toMatchObject({ downloadConcurrency: 4, downloadMemoryMiB: 64 })
 })

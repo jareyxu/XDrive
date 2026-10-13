@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from 'vitest'
-import { NetworkUnavailableError, retryNetworkRequest } from './network-retry'
+import { NetworkUnavailableError, TransferBusyError, retryNetworkRequest } from './network-retry'
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals() })
 
@@ -38,4 +38,17 @@ test('continues automatically when the browser returns online', async () => {
   window.dispatchEvent(new Event('online'))
   await expect(pending).resolves.toBe('continued')
   expect(operation).toHaveBeenCalledTimes(1)
+})
+
+
+test('busy responses wait at least Retry-After and stop after a bounded retry budget', async () => {
+  vi.useFakeTimers()
+  const operation = vi.fn(async () => { throw new TransferBusyError() })
+  const pending = retryNetworkRequest(operation)
+  const rejected = expect(pending).rejects.toThrow('服务器持续繁忙')
+  await vi.advanceTimersByTimeAsync(999)
+  expect(operation).toHaveBeenCalledTimes(1)
+  await vi.runAllTimersAsync()
+  await rejected
+  expect(operation).toHaveBeenCalledTimes(9)
 })

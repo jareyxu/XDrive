@@ -33,7 +33,7 @@ test('owner cancellation aborts live tasks and prevents fresh admission', async 
 test('already aborted or invalid scheduling never reads a file', async () => {
  const task = vi.fn(async () => undefined), owner = new AbortController(); owner.abort()
  await expect(runBoundedTasks(0, 2, task, owner.signal)).rejects.toMatchObject({ name: 'AbortError' })
- for (const [count, parallel] of [[-1, 2], [4097, 2], [1, 1], [1, 5], [1, 2.5]]) await expect(runBoundedTasks(count!, parallel!, task)).rejects.toBeInstanceOf(RangeError)
+ for (const [count, parallel] of [[-1, 2], [4097, 2], [1, 0], [1, 9], [1, 2.5]]) await expect(runBoundedTasks(count!, parallel!, task)).rejects.toBeInstanceOf(RangeError)
  expect(task).not.toHaveBeenCalled()
 })
 test('write-ahead snapshots cannot finish out of order or discard another chunk update', async () => {

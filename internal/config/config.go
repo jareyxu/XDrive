@@ -15,6 +15,8 @@ import (
 // Config contains only server-side configuration. User passwords and
 // decryption keys must never be added here.
 type Config struct {
+	UploadConcurrency       int    `toml:"upload_concurrency"`
+	DownloadConcurrency     int    `toml:"download_concurrency"`
 	ListenAddr              string `toml:"listen_addr"`
 	LogLevel                string `toml:"log_level"`
 	DatabasePath            string `toml:"database_path"`
@@ -62,6 +64,8 @@ const DefaultBackupWarnAfterDays = 30
 // environment overrides. It intentionally has no password or key fields.
 func Load(path string) (Config, error) {
 	cfg := Config{
+		UploadConcurrency:       4,
+		DownloadConcurrency:     8,
 		ListenAddr:              envOr("XDRIVE_LISTEN_ADDR", "127.0.0.1:8787"),
 		LogLevel:                DefaultLogLevel,
 		DatabasePath:            envOr("XDRIVE_DATABASE_PATH", "data/xdrive.db"),
@@ -113,6 +117,24 @@ func Load(path string) (Config, error) {
 		cfg.StoragePath = envOr("XDRIVE_STORAGE_PATH", cfg.StoragePath)
 		cfg.SecretPath = envOr("XDRIVE_SECRET_PATH", cfg.SecretPath)
 		cfg.Username = envOr("XDRIVE_USERNAME", cfg.Username)
+	}
+	for _, setting := range []struct {
+		name  string
+		value *int
+	}{
+		{"XDRIVE_UPLOAD_CONCURRENCY", &cfg.UploadConcurrency},
+		{"XDRIVE_DOWNLOAD_CONCURRENCY", &cfg.DownloadConcurrency},
+	} {
+		if raw := os.Getenv(setting.name); raw != "" {
+			value, err := strconv.Atoi(raw)
+			if err != nil {
+				return Config{}, fmt.Errorf("parse %s: %w", setting.name, err)
+			}
+			*setting.value = value
+		}
+		if *setting.value < 1 || *setting.value > 64 {
+			return Config{}, fmt.Errorf("%s must be between 1 and 64", setting.name)
+		}
 	}
 	cfg.LogLevel = envOr("XDRIVE_LOG_LEVEL", cfg.LogLevel)
 	if err := ValidateLogLevel(cfg.LogLevel); err != nil {

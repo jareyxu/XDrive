@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ArrowDownToLine, ArrowUpFromLine } from 'lucide-react'
 import type { ActiveTransfer } from '../transfers/transfer-types'
+import { networkBytes } from '../transfers/network-meter'
 import { formatBytes } from '../utils/format-bytes'
 
 interface TransferRate {
@@ -15,7 +16,6 @@ interface Sample extends TransferRate {
 const EMPTY_RATE: TransferRate = { upload: 0, download: 0 }
 
 export function TransferSpeedIndicator(props: { tasks: readonly ActiveTransfer[] }) {
-  const tasksRef = useRef(props.tasks)
   const [rateState, setRateState] = useState<{ key: string; rate: TransferRate }>({ key: '', rate: EMPTY_RATE })
   const transferKey = props.tasks
     .filter(task => !['completed', 'failed', 'cancelled'].includes(task.phase))
@@ -25,26 +25,18 @@ export function TransferSpeedIndicator(props: { tasks: readonly ActiveTransfer[]
   const rate = rateState.key === transferKey ? rateState.rate : EMPTY_RATE
   const hasTransfers = props.tasks.some(task => !['completed', 'failed', 'cancelled'].includes(task.phase))
 
-  useEffect(() => { tasksRef.current = props.tasks }, [props.tasks])
 
   useEffect(() => {
     if (!hasTransfers) return
 
-    let previous = new Map<string, number>()
+    let previous = networkBytes()
     let previousAt = performance.now()
     const samples: Sample[] = []
     const sample = () => {
       const now = performance.now()
-      const current = new Map<string, number>()
-      let upload = 0
-      let download = 0
-      for (const task of tasksRef.current) {
-        if (['completed', 'failed', 'cancelled'].includes(task.phase)) continue
-        current.set(task.id, task.completedBytes)
-        const delta = Math.max(0, task.completedBytes - (previous.get(task.id) ?? task.completedBytes))
-        if (task.kind === 'upload') upload += delta
-        else download += delta
-      }
+      const current = networkBytes()
+      const upload = Math.max(0, current.upload - previous.upload)
+      const download = Math.max(0, current.download - previous.download)
       previous = current
       const duration = Math.max(1, now - previousAt)
       previousAt = now
@@ -66,7 +58,7 @@ export function TransferSpeedIndicator(props: { tasks: readonly ActiveTransfer[]
   }, [hasTransfers, transferKey])
 
   if (!hasTransfers) return null
-  return <div className="desktop-transfer-speed" role="group" aria-label="实时传输速度" title="按已完成的文件数据计算，显示最近约 3 秒平均速度">
+  return <div className="desktop-transfer-speed" role="group" aria-label="实时传输速度" title="按实际传输的加密数据计算，含重试流量，显示最近约 3 秒平均速度">
     <span className="desktop-transfer-rate"><ArrowUpFromLine size={14} aria-hidden="true" /><span>上传</span><strong>{formatBytes(rate.upload)}/s</strong></span>
     <span className="desktop-transfer-rate"><ArrowDownToLine size={14} aria-hidden="true" /><span>下载</span><strong>{formatBytes(rate.download)}/s</strong></span>
   </div>

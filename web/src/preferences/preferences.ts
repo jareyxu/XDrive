@@ -6,7 +6,10 @@ export interface Preferences {
   readonly clarity: number
   readonly reduceTransparency: boolean
   readonly backupReminderDays: number
-  readonly uploadConcurrency: 2 | 3 | 4
+  readonly uploadConcurrency: number
+  readonly downloadConcurrency?: number
+  readonly downloadMemoryMiB?: number
+  readonly autoTransfer?: boolean
 }
 interface Snapshot extends Preferences { readonly persistenceAvailable: boolean }
 interface PreferenceStore {
@@ -24,9 +27,16 @@ export function backupIsOverdue(lastBackupAt: number | null, now: number, days: 
   return lastBackupAt === null || now - lastBackupAt > days * 86400000
 }
 
-export function currentUploadConcurrency(): 2 | 3 | 4 {
-  return typeof window !== 'undefined' && window.xdrivePreferences ? window.xdrivePreferences.getSnapshot().uploadConcurrency : 2
+export function currentTransferPreferences() {
+  const saved = typeof window !== 'undefined' ? window.xdrivePreferences?.getSnapshot() : undefined
+  return {
+    uploadConcurrency: saved?.uploadConcurrency ?? 4,
+    downloadConcurrency: saved?.downloadConcurrency ?? 4,
+    downloadMemoryMiB: saved?.downloadMemoryMiB ?? 64,
+    autoTransfer: saved?.autoTransfer ?? true,
+  }
 }
+export function currentUploadConcurrency(): number { return currentTransferPreferences().uploadConcurrency }
 
 /** A browser may remind sooner, but cannot defer the server's warning policy. */
 export function effectiveBackupReminderDays(serverDays: number, browserDays: number): number {

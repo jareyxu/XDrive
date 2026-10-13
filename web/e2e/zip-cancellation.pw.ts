@@ -14,7 +14,7 @@ test('ZIP cancellation and file/ZIP locks stop producers while a browser sink is
     await page.getByRole('button', { name: '创建加密云盘' }).click()
     await expect(page.getByRole('heading', { name: '我的文件' })).toBeVisible({ timeout: 30_000 })
     await page.locator('input[type="file"]:not([webkitdirectory])').first().setInputFiles({ name: 'cancel-private.bin', mimeType: 'application/octet-stream', buffer: Buffer.alloc(24 * 1024 * 1024, 23) })
-    await expect(page.getByRole('button', { name: 'cancel-private.bin', exact: true })).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByRole('button', { name: 'cancel-private.bin', exact: true }).and(page.locator('button:not(.folder-tree-name)'))).toBeVisible({ timeout: 30_000 })
     await expect(page.getByRole('status')).toContainText('上传完成。')
     let objectReads = 0
     const evidence: unknown[] = []
@@ -23,7 +23,7 @@ test('ZIP cancellation and file/ZIP locks stop producers while a browser sink is
       const readsAtStart = objectReads
       if (action === 'file-lock') {
         await page.getByLabel('密码').fill('correct horse battery')
-        await page.getByRole('button', { name: '解锁云盘', exact: true }).click()
+        await page.getByRole('button', { name: '解锁云盘', exact: true }).and(page.locator('button:not(.folder-tree-name)')).click()
         await expect(page.getByRole('heading', { name: '我的文件' })).toBeVisible({ timeout: 30_000 })
       }
       await page.evaluate(() => {
@@ -48,14 +48,15 @@ test('ZIP cancellation and file/ZIP locks stop producers while a browser sink is
           }),
         }) })
       })
-      await page.getByRole('button', { name: action === 'file-lock' ? '下载 cancel-private.bin' : '下载为 ZIP', exact: true }).click()
+      if (action === 'file-lock') await page.getByRole('button', { name: '更多操作 cancel-private.bin', exact: true }).click()
+      await page.getByRole('button', { name: action === 'file-lock' ? '下载 cancel-private.bin' : '下载为 ZIP', exact: true }).and(page.locator('button:not(.folder-tree-name)')).click()
       await expect.poll(() => page.evaluate(() => (window as Window & { zipProbe?: { paused: boolean } }).zipProbe?.paused)).toBe(true)
       if (action === 'cancel') {
-        await page.getByRole('button', { name: '取消 ZIP 下载', exact: true }).click()
-        await expect(page.getByRole('button', { name: '取消 ZIP 下载', exact: true })).toHaveCount(0, { timeout: 5000 })
+        await page.getByRole('button', { name: '取消 ZIP 下载', exact: true }).and(page.locator('button:not(.folder-tree-name)')).click()
+        await expect(page.getByRole('button', { name: '取消 ZIP 下载', exact: true }).and(page.locator('button:not(.folder-tree-name)'))).toHaveCount(0, { timeout: 5000 })
         await expect(page.getByRole('status')).toContainText('ZIP 已取消。')
       } else {
-        await page.getByRole('button', { name: '锁定云盘' }).click()
+        await page.getByRole('button', { name: 'admin', exact: true }).click(); page.once('dialog', dialog => void dialog.accept()); await page.getByRole('menuitem', { name: '锁定云盘' }).click()
         await expect(page.getByRole('heading', { name: '重新解锁云盘' })).toBeVisible()
         await expect(page.getByText('cancel-private.bin', { exact: true })).toHaveCount(0)
       }

@@ -21,8 +21,8 @@ describe('single-file memory fallback admission', () => {
     const fetch = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => new Response(null, { status: 400 }))
     vi.stubGlobal('fetch', fetch)
     await expect(downloadFile(unusedVault, entry(ceiling))).rejects.toThrow()
-    expect(fetch).toHaveBeenCalledTimes(1)
-    expect(String(fetch.mock.calls[0]?.[0])).toContain('/api/v1/objects/budget-manifest')
+    expect(fetch.mock.calls.filter(call => String(call[0]).startsWith('/api/v1/objects/'))).toHaveLength(1)
+    expect(String(fetch.mock.calls.at(-1)?.[0])).toContain('/api/v1/objects/budget-manifest')
   })
 
   it('does not impose the memory ceiling on streaming output and aborts that output on manifest failure', async () => {
@@ -31,7 +31,7 @@ describe('single-file memory fallback admission', () => {
     const abort = vi.fn(), write = vi.fn()
     const writable = new WritableStream<Uint8Array>({ abort, write })
     await expect(downloadFile(unusedVault, entry(ceiling + 1), undefined, writable)).rejects.toThrow()
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch.mock.calls.filter(call => String(call[0]).startsWith('/api/v1/objects/'))).toHaveLength(1)
     expect(write).not.toHaveBeenCalled()
     await vi.waitFor(() => expect(abort).toHaveBeenCalledOnce())
   })

@@ -218,3 +218,7 @@ test('random and entropy-failure server IDs are bounded; arbitrary tokens are re
   for (const value of ['', first.toUpperCase(), `${first}\n`, '18aff2c123-1\n', 'x'.repeat(1000), 'abcdef', undefined]) expect(validRequestId(value)).toBeUndefined()
   expect(new APIError(401, 'invalid_credentials\n').code).toBe('request_failed')
 })
+
+test('server busy response explains that transfer will retry', () => {
+  expect(new APIError(503, 'transfer_busy').message).toContain('系统正在稍后重试')
+})

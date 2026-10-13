@@ -2,18 +2,17 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v2.0.5",
-    "reviewedAt": "2026-10-12",
-    "reviewer": "User-authorized v2.0.5 server-shared wallpaper release; additive SQLite schema and unchanged encrypted user-data formats reviewed",
+    "version": "v2.0.6",
+    "reviewedAt": "2026-10-13",
+    "reviewer": "User-authorized v2.0.6 transfer pipeline release; encrypted formats and SQLite schema unchanged",
     "evidence": [
-      "The wallpaper is a single bounded (10 MiB) plaintext system asset in SQLite schema 8. Its read endpoint is intentionally unauthenticated so the login page can display it; upload and deletion require a valid session, CSRF token and same-origin request. The asset is backed up with SQLite and is excluded from encrypted user-file quota.",
-      "The encrypted object envelope, vault/key-slot formats, encrypted file metadata, AAD, browser recovery payloads, client mutation protocol, and backup container format are unchanged. Backup restore accepts snapshot schemas 2–8.",
-      "This release also updates the brand mark/favicon and adds the live transfer-speed indicator. The prior v2.0.4 video startup and diagnostics behavior is retained.",
-      "Full local make test passed on 2026-10-12: web typecheck/lint/build, Go vet and tests, installer/upgrade/uninstall checks, release-format and persistent-format contracts, 560 frontend tests, and 3 TLS proxy tests. Existing lint warnings remain; no release check failed.",
-      "Publication requires full local make test, exact-commit main CI with all-package race tests and Linux amd64/arm64 builds, followed by released archive checksum verification."
+      "The release changes browser transfer scheduling, bounded download prefetch, batch upload concurrency, transfer settings and server-side concurrency admission. The encrypted object envelope, key-slot and vault formats, AAD, encrypted metadata, client mutation protocol, backup container and SQLite schema remain unchanged.",
+      "The transfer memory budget bounds prefetched chunk slots only; it is not a browser process RSS limit. Existing bounded full-file fallback and media preview limits remain in force.",
+      "Local frontend unit, Chromium and WebKit transfer E2E, Go tests and race tests, static checks and production build passed on 2026-10-13. Actual Linux VPS throughput and RSS comparison remains a deployment validation item.",
+      "Publication requires full local make test, successful main-branch CI for the exact tagged commit, and GitHub release archive checksum verification."
     ]
   },
-  "scope": "XDrive v2.0.5 adds a server-shared, publicly readable plaintext desktop wallpaper for login and desktop screens, backed by additive SQLite schema 8; encrypted user-data formats remain unchanged",
+  "scope": "XDrive v2.0.6 improves upload and download throughput through bounded parallelism and prefetch; encrypted user-data formats and SQLite schema are unchanged.",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,
