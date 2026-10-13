@@ -32,9 +32,10 @@ export function TransferPanel(props: TransferPanelProps) {
 
   return <aside className={`${styles.root}${expanded ? ` ${styles.expanded}` : ''}`} aria-label="传输面板" data-testid="transfer-panel">
     <span className={styles.live} aria-live="polite" aria-atomic="true">{announcement}</span>
-    <button className={`${styles.pill} glass-chrome`} type="button" aria-expanded={expanded} aria-controls="xdrive-transfer-content" onClick={() => setExpanded((value) => !value)}>
+    <button className={`${styles.pill} glass-chrome`} type="button" aria-label={`${count} 项传输，${percentage}%`} aria-expanded={expanded} aria-controls="xdrive-transfer-content" onClick={() => setExpanded((value) => !value)}>
       <span className={styles.pillIcon} aria-hidden="true">{activeCount > 0 ? <LoaderCircle size={16} /> : <Check size={16} />}</span>
       <span>{count > 0 ? `${count} 项传输${total > 0 ? `，${percentage}%` : ''}` : '传输已完成'}</span>
+      <span className={styles.compactCount} aria-hidden="true">{count}</span>
       <ChevronDown className={styles.chevron} size={15} aria-hidden="true" />
     </button>
     {expanded && <section id="xdrive-transfer-content" className={`${styles.panel} glass-chrome`} aria-label="上传和下载任务">

@@ -21,18 +21,18 @@ function boot(raw: string | null = null, denied = false) {
 test('actual head script applies safe defaults before React, with a stable snapshot', () => {
   const state = boot()
   expect(state.dataset).toEqual({ theme: 'light', reduceTransparency: 'false' })
-  expect(state.properties['--glass-clarity']).toBe('0.5')
+  expect(state.properties).toEqual({})
   expect(state.store.getSnapshot()).toBe(state.store.getSnapshot())
   expect(state.store.getSnapshot().backupReminderDays).toBe(30)
 })
 test.each(['invalid json', '[]', 'null', JSON.stringify({ theme: 'bad', clarity: 2, reduceTransparency: 'true', backupReminderDays: 0 }), ' '.repeat(4097)])('corrupt or excessive preference input never applies unsafe values', raw => {
   const state = boot(raw)
-  expect(state.store.getSnapshot()).toMatchObject({ theme: 'system', clarity: 0.5, reduceTransparency: false, backupReminderDays: 30 })
+  expect(state.store.getSnapshot()).toMatchObject({ theme: 'system', backupReminderDays: 30 })
 })
 test('only whitelisted non-sensitive fields persist; subscribers and cross-tab invalidation work', () => {
   const state = boot(); const notify = vi.fn(); const stop = state.store.subscribe(notify)
-  state.store.set({ theme: 'dark', clarity: 1, vaultKey: 'must-not-persist', fileName: 'private' } as Partial<Preferences>)
-  expect(Object.keys(JSON.parse(state.saved()!))).toEqual(['theme', 'clarity', 'reduceTransparency', 'backupReminderDays', 'view', 'uploadConcurrency', 'downloadConcurrency', 'downloadMemoryMiB', 'autoTransfer'])
+  state.store.set({ theme: 'dark', vaultKey: 'must-not-persist', fileName: 'private' } as Partial<Preferences>)
+  expect(Object.keys(JSON.parse(state.saved()!))).toEqual(['theme', 'backupReminderDays', 'view', 'uploadConcurrency', 'downloadConcurrency', 'downloadMemoryMiB', 'autoTransfer'])
   expect(state.saved()).not.toMatch(/must-not-persist|private/u)
   expect(state.dataset.theme).toBe('dark'); expect(notify).toHaveBeenCalledTimes(1)
   state.events.get('storage')!({ key: 'other-sensitive-key', newValue: null }); expect(notify).toHaveBeenCalledTimes(1)
@@ -40,17 +40,19 @@ test('only whitelisted non-sensitive fields persist; subscribers and cross-tab i
   expect(state.dataset.theme).toBe('light'); expect(state.store.getSnapshot().backupReminderDays).toBe(7)
   stop(); state.events.get('storage')!({ key: null, newValue: null }); expect(notify).toHaveBeenCalledTimes(2)
 })
-test('system theme follows media changes; explicit theme wins and system transparency always wins', () => {
+test('system theme and operating-system reduced-transparency preference follow media changes', () => {
   const state = boot(); const dark = state.queries.get('(prefers-color-scheme: dark)')!
   dark.matches = true; dark.change!(); expect(state.dataset.theme).toBe('dark')
   state.store.set({ theme: 'light' }); dark.change!(); expect(state.dataset.theme).toBe('light')
   const reduce = state.queries.get('(prefers-reduced-transparency: reduce)')!
-  reduce.matches = true; reduce.change!(); state.store.set({ reduceTransparency: false })
+  reduce.matches = true; reduce.change!()
   expect(state.dataset.reduceTransparency).toBe('true')
+  reduce.matches = false; reduce.change!()
+  expect(state.dataset.reduceTransparency).toBe('false')
 })
 test('blocked storage still applies in-memory preferences and exposes persistence failure', () => {
-  const state = boot(null, true); state.store.set({ theme: 'dark', reduceTransparency: true })
-  expect(state.dataset).toEqual({ theme: 'dark', reduceTransparency: 'true' })
+  const state = boot(null, true); state.store.set({ theme: 'dark' })
+  expect(state.dataset).toEqual({ theme: 'dark', reduceTransparency: 'false' })
   expect(state.store.getSnapshot().persistenceAvailable).toBe(false)
 })
 

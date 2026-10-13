@@ -1,17 +1,20 @@
 .root {
-  position: fixed;
-  z-index: 32;
-  top: 2px;
-  right: 218px;
+  position: relative;
+  z-index: 1;
+  top: auto;
+  right: auto;
   bottom: auto;
+  flex: 0 0 180px;
   width: 180px;
+  min-width: 0;
   color: var(--label-1);
   font-size: 12px;
 }
 
 .pill {
+  position: relative;
   display: flex;
-  min-height: 46px;
+  min-height: 31px;
   align-items: center;
   gap: 10px;
   width: 100%;
@@ -25,7 +28,9 @@
   cursor: pointer;
 }
 
-.pillIcon { display: grid; color: var(--accent); }
+.pill > span:not(.pillIcon):not(.compactCount) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compactCount { display: none; }
+.pillIcon { display: grid; flex: 0 0 auto; color: var(--accent); }
 .pillIcon :global(svg) { animation: spin 1.2s linear infinite; }
 .pillIcon:has(:global(svg.lucide-check)) :global(svg) { animation: none; }
 .chevron { transition: transform var(--transition-fast); }
@@ -77,11 +82,23 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 760px) {
-  .root { top: 2px; right: 116px; bottom: auto; width: 132px; }
-  .pill { min-height: 44px; gap: 5px; padding: 0 7px; font-size: 10px; }
-  .panel { position: fixed; top: 54px; right: 8px; bottom: auto; left: auto; width: min(360px, calc(100vw - 16px)); max-height: min(72dvh, 640px); border-radius: 16px; padding-bottom: env(safe-area-inset-bottom); }
+  .root { top: auto; right: auto; bottom: auto; flex: 0 1 140px; width: 140px; min-width: 44px; }
+  .pill { min-height: 31px; gap: 5px; padding: 0 8px; font-size: 10px; }
+  .panel { position: fixed; top: 37px; right: 8px; bottom: auto; left: auto; width: min(360px, calc(100vw - 16px)); max-height: min(72dvh, 640px); border-radius: 16px; padding-bottom: env(safe-area-inset-bottom); }
   .header, .item, .reservation, .footer { padding-right: 18px; padding-left: 18px; }
   .close, .action, .quietAction { min-width: 44px; min-height: 44px; }
+}
+
+@media (max-width: 480px) {
+  .root { flex-basis: 112px; }
+  .pill { gap: 4px; padding-inline: 6px; font-size: 9px; }
+}
+
+@media (max-width: 380px) {
+  .root { flex-basis: 42px; }
+  .pill { justify-content: center; gap: 0; padding-inline: 0; }
+  .pill > span:not(.pillIcon):not(.compactCount), .chevron { display: none; }
+  .compactCount { position: absolute; top: -4px; right: -4px; display: grid; min-width: 17px; height: 17px; place-items: center; padding: 0 4px; border: 1px solid var(--surface-control); border-radius: 999px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 650; }
 }
 
 @media (prefers-reduced-motion: reduce) {

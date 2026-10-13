@@ -16,14 +16,12 @@
 :root[data-reduce-transparency="true"] .desktop-topbar,
 :root[data-reduce-transparency="true"] .app-window-titlebar { backdrop-filter: none; -webkit-backdrop-filter: none; }
 .desktop-topbar {
-  position: absolute; z-index: 30; inset: 0 0 auto; display: flex; height: 50px; align-items: center; justify-content: space-between;
-  padding: 0 22px; background: rgb(31 100 159 / 88%); color: #fff; box-shadow: 0 1px rgb(255 255 255 / 18%);
+  position: absolute; z-index: 30; inset: 0 0 auto; display: flex; height: 33px; align-items: center; justify-content: flex-end;
+  padding: 0 22px; background: rgb(0 0 0 / 20%); color: #fff; box-shadow: 0 1px rgb(255 255 255 / 18%);
   backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
 }
-.desktop-brand, .desktop-topbar-button, .desktop-account-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 9px; background: transparent; color: inherit; cursor: pointer; }
-.desktop-brand { padding: 0; font-size: 16px; letter-spacing: -.02em; }
-.desktop-brand img { display: block; width: 126px; height: 30px; object-fit: contain; filter: brightness(0) invert(1); }
-.desktop-topbar-actions { display: flex; height: 100%; align-items: center; gap: 12px; }
+.desktop-topbar-button, .desktop-account-button { display: inline-flex; min-height: 31px; align-items: center; justify-content: center; gap: 9px; background: transparent; color: inherit; cursor: pointer; }
+.desktop-topbar-actions { display: flex; min-width: 0; height: 100%; align-items: center; gap: 12px; }
 .desktop-transfer-speed { display: flex; align-items: center; gap: 12px; padding: 0 4px; color: rgb(255 255 255 / 88%); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .desktop-transfer-rate { display: inline-flex; align-items: center; gap: 5px; }
 .desktop-transfer-rate strong { color: #fff; font-weight: 600; }
@@ -54,7 +52,7 @@
 .account-popover > button { display: flex; width: 100%; min-height: 42px; align-items: center; gap: 10px; padding: 0 10px; border-radius: 9px; background: transparent; color: var(--label-1); text-align: left; font-size: 12px; }
 .account-popover > button:hover { background: var(--fill-1); }
 .account-popover > button.is-danger { margin-top: 5px; border-top: 1px solid var(--separator); border-radius: 0 0 9px 9px; color: var(--danger); }
-.desktop-icons { position: absolute; z-index: 1; top: 70px; bottom: 20px; left: 12px; display: flex; width: 92px; flex-direction: column; align-items: stretch; gap: 16px; }
+.desktop-icons { position: absolute; z-index: 1; top: 55px; bottom: 20px; left: 12px; display: flex; width: 92px; flex-direction: column; align-items: stretch; gap: 16px; }
 .desktop-icons > button { display: grid; min-height: 102px; align-content: center; justify-items: center; gap: 8px; border: 1px solid transparent; border-radius: 13px; background: transparent; color: #fff; text-shadow: 0 1px 4px rgb(0 0 0 / 48%); cursor: pointer; font-size: 12px; }
 .desktop-icons > button:hover, .desktop-icons > button.is-active { border-color: rgb(255 255 255 / 24%); background: rgb(255 255 255 / 15%); }
 .desktop-app-icon { display: grid; width: 54px; height: 54px; place-items: center; background: transparent; text-shadow: none; }
@@ -134,12 +132,12 @@
   .drive-toolbar .toolbar-button svg { width: 17px; height: 17px; }
 }
 @media (max-width: 760px) {
-  .desktop-topbar { height: 50px; padding: 0 max(10px, env(safe-area-inset-left)); }
+  .desktop-topbar { height: 33px; padding: 0 max(10px, env(safe-area-inset-left)); }
   .desktop-topbar-actions { gap: 4px; }
   .desktop-account-anchor { padding-left: 5px; }
   .desktop-account-button { gap: 5px; font-size: 11px; }
   .account-avatar { width: 29px; height: 29px; }
-  .desktop-icons { top: 56px; right: 8px; bottom: auto; left: 8px; display: flex; width: auto; flex-direction: row; gap: 5px; }
+  .desktop-icons { top: 39px; right: 8px; bottom: auto; left: 8px; display: flex; width: auto; flex-direction: row; gap: 5px; }
   .desktop-icons > button { min-width: 78px; min-height: 58px; grid-auto-flow: column; grid-template-columns: 26px auto; justify-content: center; gap: 6px; padding: 0 8px; font-size: 11px; }
   .desktop-app-icon { width: 29px; height: 29px; border-radius: 9px; }
   .desktop-app-icon img { width: 29px; height: 29px; }
@@ -164,7 +162,7 @@
   .content-heading { margin: 17px 0 11px; padding: 0 14px; }
   .entry-list { padding: 0 12px 18px; }
   .desktop-taskbar-item { bottom: max(10px, env(safe-area-inset-bottom)); }
-  .desktop-popover { position: fixed; top: 54px; right: max(8px, env(safe-area-inset-right)); width: min(360px, calc(100vw - 16px)); }
+  .desktop-popover { position: fixed; top: 37px; right: max(8px, env(safe-area-inset-right)); width: min(360px, calc(100vw - 16px)); }
   .account-popover { position: absolute; top: calc(100% + 5px); width: 255px; }
   .drive-shell { padding-bottom: 0; }
   .backup-notice { display: none; }
@@ -172,30 +170,36 @@
 }
 @media (max-width: 480px) {
   .desktop-topbar { padding-inline: 8px; }
-  .desktop-brand img { width: 100px; height: 24px; }
-  .desktop-topbar-actions { gap: 2px; }
-  .desktop-transfer-speed { gap: 6px; padding-inline: 1px; font-size: 9px; }
+  .desktop-topbar-actions { gap: 3px; }
+  .desktop-transfer-speed { gap: 4px; padding-inline: 1px; font-size: 8px; }
+  .desktop-transfer-rate > span { display: none; }
   .desktop-transfer-rate { gap: 3px; }
   .desktop-transfer-rate svg { width: 12px; height: 12px; }
   .desktop-account-anchor { padding-left: 2px; border-left: 0; }
   .desktop-account-button { gap: 2px; padding-inline: 2px; }
   .desktop-account-button > span:not(.account-avatar) { display: none; }
 }
+@media (max-width: 380px) {
+  .desktop-topbar { padding-inline: 6px; }
+  .desktop-topbar-actions { gap: 2px; }
+  .desktop-topbar-button { width: 36px; }
+  .desktop-account-button { min-width: 32px; }
+}
 @media (prefers-reduced-transparency: reduce) {
   .desktop-topbar, .app-window-titlebar { backdrop-filter: none; -webkit-backdrop-filter: none; }
 }
 
 /* Desktop content uses a single layout layer, separate from legacy page styles. */
-.desktop-shell { background: #537b9e var(--xdrive-wallpaper-image, url('../assets/desktop-wallpaper.jpg')) center / cover no-repeat; }
-:root[data-theme="dark"] .desktop-shell { background-image: linear-gradient(rgb(8 20 40 / 38%), rgb(8 20 40 / 38%)), var(--xdrive-wallpaper-image, url('../assets/desktop-wallpaper.jpg')); }
-.desktop-topbar { background: rgb(29 88 148 / 65%); padding-inline: 28px; }
-.desktop-brand { font-size: 20px; font-weight: 600; }
+.desktop-shell { background: #537b9e var(--xdrive-wallpaper-image, url('../assets/desktop-wallpaper.jpg')) center / cover no-repeat; background-size: cover; background-position: center center; background-repeat: no-repeat; }
+:root[data-theme="dark"] .desktop-shell { background-image: linear-gradient(rgb(8 20 40 / 38%), rgb(8 20 40 / 38%)), var(--xdrive-wallpaper-image, url('../assets/desktop-wallpaper.jpg')); background-size: cover; background-position: center center; background-repeat: no-repeat; }
+.desktop-topbar { background: rgb(0 0 0 / 20%); padding-inline: 28px; }
 .desktop-account-button { font-size: 14px; }
-.desktop-icons { left: 22px; top: 72px; }
+.desktop-icons { left: 22px; top: 55px; }
 .desktop-app-icon { width: 54px; height: 54px; }
 .desktop-app-icon img { width: 54px; height: 54px; }
 .desktop-icons > button { text-shadow: 0 1px 5px #14365e; }
 .app-window { top: 12%; bottom: 12%; left: 17.4%; right: 17.4%; min-width: min(960px, calc(100vw - 180px)); max-width: calc(100vw - 160px); border-radius: 16px; box-shadow: 0 24px 70px rgb(12 36 67 / 30%), 0 3px 12px rgb(0 20 40 / 14%); }
+:root[data-theme="dark"] .app-window { border-color: rgb(216 230 240 / 16%); }
 .app-window-titlebar { min-height: 50px; padding-inline: 20px 12px; background: var(--surface-thick); }
 .app-window-title { gap: 10px; font-size: 16px; }
 .app-window-title strong { font-size: 16px; }
@@ -267,7 +271,7 @@
 }
 @media (max-width: 760px) {
   .desktop-topbar { padding-inline: 12px; }
-  .desktop-icons { left: 8px; top: 56px; }
+  .desktop-icons { left: 8px; top: 39px; }
   .desktop-app-icon { width: 29px; height: 29px; border-radius: 8px; }
   .desktop-app-icon img { width: 29px; height: 29px; }
   .app-window, .app-window.is-maximized { inset: 118px 7px calc(10px + env(safe-area-inset-bottom)); width: auto !important; height: auto !important; min-width: 0; max-width: none; border-radius: 12px; }

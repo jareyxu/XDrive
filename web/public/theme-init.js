@@ -2,13 +2,11 @@
 (() => {
   'use strict'
   const key = 'xdrive.preferences.v1'
-  const defaults = { theme: 'system', clarity: 0.5, reduceTransparency: false, backupReminderDays: 30, uploadConcurrency: 4, downloadConcurrency: 4, downloadMemoryMiB: 64, autoTransfer: true, view: 'grid' }
+  const defaults = { theme: 'system', backupReminderDays: 30, uploadConcurrency: 4, downloadConcurrency: 4, downloadMemoryMiB: 64, autoTransfer: true, view: 'grid' }
   const normalize = value => {
     const source = value && typeof value === 'object' && !Array.isArray(value) ? value : {}
     return Object.freeze({
       theme: ['system', 'light', 'dark'].includes(source.theme) ? source.theme : defaults.theme,
-      clarity: typeof source.clarity === 'number' && Number.isFinite(source.clarity) && source.clarity >= 0 && source.clarity <= 1 ? source.clarity : defaults.clarity,
-      reduceTransparency: typeof source.reduceTransparency === 'boolean' ? source.reduceTransparency : defaults.reduceTransparency,
       backupReminderDays: Number.isInteger(source.backupReminderDays) && source.backupReminderDays >= 1 && source.backupReminderDays <= 365 ? source.backupReminderDays : defaults.backupReminderDays,
       view: ['grid', 'list'].includes(source.view) ? source.view : defaults.view,
       uploadConcurrency: Number.isInteger(source.uploadConcurrency) && source.uploadConcurrency >= 1 && source.uploadConcurrency <= 8 ? source.uploadConcurrency : defaults.uploadConcurrency,
@@ -31,8 +29,7 @@
   const apply = () => {
     const root = document.documentElement
     root.dataset.theme = preferences.theme === 'system' ? dark.matches ? 'dark' : 'light' : preferences.theme
-    root.dataset.reduceTransparency = String(preferences.reduceTransparency || reduced.matches)
-    root.style.setProperty('--glass-clarity', String(preferences.clarity))
+    root.dataset.reduceTransparency = String(reduced.matches)
   }
   const publish = () => {
     snapshot = Object.freeze({ ...preferences, persistenceAvailable })

@@ -22,7 +22,7 @@ vi.mock('../preferences/preferences', () => ({
   backupIsOverdue: () => false,
   setPreferences: vi.fn(),
   usePreferences: () => ({
-    persistenceAvailable: true, theme: 'system', clarity: 0.7, reduceTransparency: false,
+    persistenceAvailable: true, theme: 'system',
     view: 'grid', uploadConcurrency: 2, backupReminderDays: 30,
   }),
 }))

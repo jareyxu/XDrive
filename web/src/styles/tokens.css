@@ -1,12 +1,9 @@
 :root {
   color-scheme: light dark;
-  --glass-clarity: 0.5;
-  --tint-chrome: calc(0.82 - 0.27 * var(--glass-clarity));
-  --tint-thick: calc(0.94 - 0.14 * var(--glass-clarity));
-  --tint-clear: calc(0.34 - 0.12 * var(--glass-clarity));
-  --blur-chrome: calc(30px - 12px * var(--glass-clarity));
-  --blur-thick: calc(40px - 12px * var(--glass-clarity));
-  --blur-clear: calc(22px - 8px * var(--glass-clarity));
+  --tint-chrome: 0.685;
+  --tint-thick: 0.87;
+  --blur-chrome: 24px;
+  --blur-thick: 34px;
   --radius-control: 9px;
   --radius-card: 12px;
   --radius-panel: 22px;

@@ -3,8 +3,6 @@ import { useSyncExternalStore } from 'react'
 export interface Preferences {
   readonly view: 'grid' | 'list'
   readonly theme: 'system' | 'light' | 'dark'
-  readonly clarity: number
-  readonly reduceTransparency: boolean
   readonly backupReminderDays: number
   readonly uploadConcurrency: number
   readonly downloadConcurrency?: number

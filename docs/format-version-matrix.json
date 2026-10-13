@@ -2,17 +2,17 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v2.0.6",
+    "version": "v2.0.7",
     "reviewedAt": "2026-10-13",
-    "reviewer": "User-authorized v2.0.6 transfer pipeline release; encrypted formats and SQLite schema unchanged",
+    "reviewer": "User-authorized v2.0.7 UI and appearance settings release; encrypted formats and SQLite schema unchanged",
     "evidence": [
-      "The release changes browser transfer scheduling, bounded download prefetch, batch upload concurrency, transfer settings and server-side concurrency admission. The encrypted object envelope, key-slot and vault formats, AAD, encrypted metadata, client mutation protocol, backup container and SQLite schema remain unchanged.",
-      "The transfer memory budget bounds prefetched chunk slots only; it is not a browser process RSS limit. Existing bounded full-file fallback and media preview limits remain in force.",
-      "Local frontend unit, Chromium and WebKit transfer E2E, Go tests and race tests, static checks and production build passed on 2026-10-13. Actual Linux VPS throughput and RSS comparison remains a deployment validation item.",
+      "The release removes browser preferences for glass clarity and user-controlled transparency reduction, fixes glass appearance at its previous default, and keeps the operating-system reduced-transparency accessibility preference. Desktop/authentication chrome and wallpaper background sizing are adjusted. No server behavior changes.",
+      "The encrypted object envelope, key-slot and vault formats, AAD, encrypted metadata, client mutation protocol, backup container, browser encrypted state, and SQLite schema are unchanged.",
+      "Local full make test passed on 2026-10-13: production frontend checks/build, Go vet/tests, script and contract checks, 572 frontend tests, and three TLS proxy checks. GitHub Actions must still pass for the exact main commit before publication.",
       "Publication requires full local make test, successful main-branch CI for the exact tagged commit, and GitHub release archive checksum verification."
     ]
   },
-  "scope": "XDrive v2.0.6 improves upload and download throughput through bounded parallelism and prefetch; encrypted user-data formats and SQLite schema are unchanged.",
+  "scope": "XDrive v2.0.7 refines the desktop and authentication UI, removes ineffective transparency preferences, and makes wallpaper cover sizing explicit; encrypted user-data formats and SQLite schema are unchanged.",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,

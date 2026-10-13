@@ -301,7 +301,7 @@ function LoginScreen(props: {
     }
   }
 
-  return <AuthLayout eyebrow={props.session ? '云盘已锁定' : '安全登录'} title={props.session ? '重新解锁云盘' : '欢迎回来'} description="输入密码，在本地解锁你的加密数据。">
+  return <AuthLayout locked={Boolean(props.session)} eyebrow={props.session ? '云盘已锁定' : '安全登录'} title={props.session ? '重新解锁云盘' : '欢迎回来'} description="输入密码，在本地解锁你的加密数据。">
     <form className="auth-form" aria-busy={busy || props.logoutPending} onSubmit={(event) => void submit(event)}>
       {!props.session && <><label className="field-label" htmlFor="login-username">管理员用户名</label><input id="login-username" autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required maxLength={128} disabled={props.logoutPending} /> </>}
       <label className="field-label" htmlFor="login-password">密码</label>
@@ -313,20 +313,19 @@ function LoginScreen(props: {
       </button>
       {props.session && <button className="quiet-button" type="button" onClick={() => { authAttempt.cancel(); setBusy(false); setPassword(''); void props.onLogout() }}>退出此会话</button>}
     </form>
-    <SecurityNote />
+    {!props.session && <SecurityNote />}
   </AuthLayout>
 }
 
-function AuthLayout(props: { eyebrow: string; title: string; description: string; children: ReactNode }) {
+function AuthLayout(props: { locked?: boolean; eyebrow: string; title: string; description: string; children: ReactNode }) {
   return <main className="auth-screen">
-    <header className="brand-row"><img className="brand-wordmark" src="/brand-wordmark.svg" alt="XDrive" /><span className="brand-private"><LockKeyhole size={12} /> 私有云盘</span></header>
     <section className="auth-window" aria-label={props.title}>
-      <header className="auth-window-titlebar"><span className="auth-window-title"><img src="/brand-mark.svg" alt="" /><strong>XDrive</strong></span><span className="auth-window-caption">{props.eyebrow}</span></header>
+      {!props.locked && <header className="auth-window-titlebar"><span className="auth-window-title"><img src="/brand-mark.svg" alt="" /><strong>XDrive</strong></span><span className="auth-window-caption">{props.eyebrow}</span></header>}
       <div className="auth-content">
         <div className="auth-card">
           <div className="auth-heading"><span className="eyebrow"><ShieldCheck size={14} /> {props.eyebrow}</span><h1>{props.title}</h1><p>{props.description}</p></div>
           {props.children}
-          <p className="auth-footnote">端到端加密 · 单用户 · 数据保存在你的服务器</p>
+          {!props.locked && <p className="auth-footnote">端到端加密 · 单用户 · 数据保存在你的服务器</p>}
         </div>
       </div>
     </section>
@@ -1636,8 +1635,19 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
 
   return <main className={`desktop-shell${activeView === 'drive' && zipSelections.size > 0 ? ' has-drive-selection' : ''}`}>
     <header className="desktop-topbar">
-      <button type="button" className="desktop-brand" onClick={() => setWindowOpen(false)} aria-label="显示桌面"><img src="/brand-wordmark.svg" alt="XDrive" /></button>
       <div className="desktop-topbar-actions">
+        <TransferPanel
+          key={recoverableTransfers.length > 0 ? 'has-recoverable-uploads' : 'no-recoverable-uploads'}
+          active={transferTasks}
+          recoverable={recoverableTransfers}
+          now={now}
+          disabled={writeBlocked || uploading}
+          onCancel={cancelTransfer}
+          onResume={resumeTransfer}
+          onRestart={restartExpiredTransfer}
+          onAbandon={(recordId) => { const record = resumeRecords.find((item) => item.id === recordId); if (record) void handleAbandonResume(record) }}
+          reservedBytes={usage?.uploadReservedBytes ?? usage?.reservedBytes ?? 0}
+        />
         <TransferSpeedIndicator tasks={transferTasks} />
         <div className="desktop-notifications-anchor">
           <button type="button" className="desktop-topbar-button" aria-label={`通知${notificationCount ? `，${notificationCount} 条待处理` : ''}`} aria-expanded={notificationsOpen} onClick={() => { setNotificationsOpen(value => !value); setReadTransferNotifications(current => new Set([...current, ...recentTransferResults.map(task => task.id)])); setSystemUpdateNotice(current => current ? { ...current, read: true } : null); setAccountMenuOpen(false) }}><Bell size={19} />{notificationCount > 0 && <span className="desktop-badge">{notificationCount > 9 ? '9+' : notificationCount}</span>}</button>
@@ -1784,18 +1794,6 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
     }} />}
     {pendingRestoreConflict && <RestoreConflictDialog message={pendingRestoreConflict.message} count={pendingRestoreConflict.ids.length} onClose={() => setPendingRestoreConflict(null)} onKeepBoth={() => void restoreRoots(pendingRestoreConflict.ids, 'keep-both')} />}
     {pendingFolderConflict && <FolderConflictDialog kind={pendingFolderConflict.kind} destinationLabel={pendingFolderConflict.destinationLabel} conflicts={pendingFolderConflict.conflicts} availableBytes={usage?.availableBytes ?? null} trashBytes={usage?.trashBytes ?? null} formatBytes={formatBytes} onConfirm={pendingFolderConflict.confirm} onCancel={pendingFolderConflict.cancel} />}
-    <TransferPanel
-      key={recoverableTransfers.length > 0 ? 'has-recoverable-uploads' : 'no-recoverable-uploads'}
-      active={transferTasks}
-      recoverable={recoverableTransfers}
-      now={now}
-      disabled={writeBlocked || uploading}
-      onCancel={cancelTransfer}
-      onResume={resumeTransfer}
-      onRestart={restartExpiredTransfer}
-      onAbandon={(recordId) => { const record = resumeRecords.find((item) => item.id === recordId); if (record) void handleAbandonResume(record) }}
-      reservedBytes={usage?.uploadReservedBytes ?? usage?.reservedBytes ?? 0}
-    />
   </main>
 }
 

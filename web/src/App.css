@@ -19,34 +19,15 @@
   min-height: 100svh;
   overflow: hidden;
   background: #537b9e var(--xdrive-wallpaper-image, url('./assets/desktop-wallpaper.jpg')) center / cover no-repeat;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
 }
 :root[data-theme="dark"] .auth-screen {
   background-image: linear-gradient(rgb(8 20 40 / 38%), rgb(8 20 40 / 38%)), var(--xdrive-wallpaper-image, url('./assets/desktop-wallpaper.jpg'));
-}
-.brand-row {
-  position: absolute;
-  inset: 0 0 auto;
-  display: flex;
-  min-height: 50px;
-  align-items: center;
-  gap: 10px;
-  padding: 0 28px;
-  background: rgb(29 88 148 / 65%);
-  color: #fff;
-  box-shadow: 0 1px rgb(255 255 255 / 18%);
-  font-size: 15px;
-  font-weight: 650;
-  letter-spacing: -0.02em;
-}
-.brand-wordmark { display: block; width: 126px; height: 30px; object-fit: contain; object-position: left center; filter: brightness(0) invert(1); }
-.brand-private {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  margin-left: 5px;
-  color: rgb(255 255 255 / 82%);
-  font-size: 12px;
-  font-weight: 500;
+  background-size: cover;
+  background-position: center center;
+  background-repeat: no-repeat;
 }
 .auth-content {
   min-height: 0;
@@ -118,6 +99,8 @@
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .auth-form input:not([type="checkbox"]):focus { border-color: var(--accent); }
+:root[data-theme="dark"] .auth-form input:not([type="checkbox"]) { border-color: rgb(255 255 255 / 9%); box-shadow: none; }
+:root[data-theme="dark"] .auth-form input:not([type="checkbox"]):focus { border-color: color-mix(in srgb, var(--accent) 72%, transparent); box-shadow: 0 0 0 2px rgb(76 164 220 / 12%); }
 .field-help { margin: 7px 0 0; color: var(--label-2); font-size: 12px; }
 .acknowledgement { display: flex; align-items: flex-start; gap: 9px; margin: 18px 0 2px; color: var(--label-2); font-size: 12px; }
 .acknowledgement input { width: 16px; height: 16px; flex: 0 0 auto; margin: 1px 0 0; accent-color: var(--accent); }
@@ -283,8 +266,6 @@
 .password-dialog form > footer button { min-height: 36px; padding: 0 14px; }
 
 @media (max-width: 760px) {
-  .brand-row { padding-inline: 14px; }
-  .brand-wordmark { width: 112px; height: 27px; }
   .auth-window { width: min(480px, calc(100vw - 24px)); max-height: calc(100svh - 82px); }
   .auth-card { padding: 25px 23px 20px; }
   .auth-heading h1 { font-size: 25px; }
