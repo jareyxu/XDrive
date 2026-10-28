@@ -2,18 +2,18 @@
   "matrixVersion": 1,
   "status": "release-approved",
   "releaseApproval": {
-    "version": "v2.0.8",
-    "reviewedAt": "2026-10-13",
-    "reviewer": "User-authorized v2.0.8 UI and built-in wallpaper release; encrypted formats unchanged",
+    "version": "v2.0.9",
+    "reviewedAt": "2026-10-28",
+    "reviewer": "User-authorized v2.0.9 transfer optimization release; persistent formats unchanged",
     "evidence": [
-      "Desktop UI removes the account avatar, softens top-bar separators, swaps transfer-speed and task-pill positions, and aligns the media-preview close control with the file-browser window controls.",
-      "The wallpaper gallery uses bundled public image assets and persists the selected built-in wallpaper in SQLite schema 9. Migration from schema 8 preserves an existing custom wallpaper selection. Wallpaper selection is shared across browsers; the images and selection are not encrypted.",
-      "The encrypted object envelope, key-slot and vault formats, AAD, encrypted metadata, client mutation protocol, backup container, and browser encrypted state are unchanged. Backup snapshots support schema 9.",
-      "Local full make test passed on 2026-10-13: production frontend checks/build, Go vet/tests, shell/install/upgrade/uninstall checks, format and package contracts, 574 frontend tests, and three TLS proxy checks. GitHub Actions must also pass for the exact main commit before publication.",
-      "Publication requires full local make test, successful main-branch CI for the exact tagged commit, and GitHub release archive checksum verification."
+      "Automatic transfer concurrency starts at up to four and samples actual admitted network work; server limits and download memory budgets remain enforced.",
+      "Bounded upload preparation overlaps network sends, persists recovery records before PUT and erases buffers on completion, failure and cancellation.",
+      "Settings expose effective concurrency ceilings and explicit download budget adjustment. Folder loading status is centered with subdued opacity.",
+      "Local frontend validation passed: 587 tests, typecheck, production build, seven protocol/format checks and six Chromium transfer/resume/lock/cancellation E2E tests.",
+      "Publication requires full local make test, successful main-branch CI for the exact tagged commit, and release archive checksum verification."
     ]
   },
-  "scope": "XDrive v2.0.8 refines top-bar and media-preview controls and adds server-persisted built-in wallpaper selection in SQLite schema 9; encrypted user-data formats are unchanged.",
+  "scope": "XDrive v2.0.9 improves bounded transfer scheduling and settings, and centers folder-loading status. SQLite schema 9 and encrypted persistent formats are unchanged.",
   "contracts": {
     "encryptedObjectEnvelope": {
       "writeVersion": 1,

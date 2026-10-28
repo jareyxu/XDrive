@@ -4,7 +4,11 @@ export class TransferGate {
   private waiting: { start: () => void; signal?: AbortSignal; abort: () => void }[] = []
   private limit: () => number
   private queueLimit: number
-  constructor(limit: () => number, queueLimit = 256) { this.limit = limit; this.queueLimit = queueLimit }
+  private draining = false
+  private onActivity: (active: number) => void
+  constructor(limit: () => number, queueLimit = 256, onActivity: (active: number) => void = () => undefined) { this.limit = limit; this.queueLimit = queueLimit; this.onActivity = onActivity }
+  /** Reconsider queued work immediately when a live concurrency limit changes. */
+  refresh() { this.drain() }
   acquire(signal?: AbortSignal): Promise<() => void> {
     signal?.throwIfAborted()
     return new Promise((resolve, reject) => {
@@ -13,8 +17,9 @@ export class TransferGate {
         start: () => {
           signal?.removeEventListener('abort', item.abort)
           this.active++
+          this.onActivity(this.active)
           let released = false
-          resolve(() => { if (!released) { released = true; this.active--; this.drain() } })
+          resolve(() => { if (!released) { released = true; this.active--; this.onActivity(this.active); this.drain() } })
         },
         abort: () => { this.waiting = this.waiting.filter(value => value !== item); reject(signal?.reason); this.drain() },
       }
@@ -25,7 +30,10 @@ export class TransferGate {
     })
   }
   private drain() {
-    while (this.active < this.limit() && this.waiting.length) this.waiting.shift()!.start()
+    if (this.draining) return
+    this.draining = true
+    try { while (this.waiting.length && this.active < this.limit()) this.waiting.shift()!.start() }
+    finally { this.draining = false }
   }
   async run<T>(operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     const release = await this.acquire(signal)

@@ -1,6 +1,6 @@
 import { NetworkUnavailableError } from '../api/network-retry'
 import { recordNetworkBytes } from './network-meter'
-import { uploadAdaptive } from './policy'
+import { uploadAdaptive, observeTransfer } from './policy'
 
 /** Same-origin XHR exposes wire progress without changing the object protocol. */
 export function uploadRequest(path: string, headers: Record<string, string>, body: Uint8Array, signal?: AbortSignal): Promise<Response> {
@@ -29,7 +29,7 @@ export function uploadRequest(path: string, headers: Record<string, string>, bod
       const count = Math.max(0, Math.min(body.byteLength, event.loaded) - sent)
       sent += count
       recordNetworkBytes('upload', count)
-      uploadAdaptive.observe(count)
+      observeTransfer('upload', count)
     }
     xhr.onload = () => {
       if (xhr.status < 200 || xhr.status > 599) { finish(new NetworkUnavailableError()); return }

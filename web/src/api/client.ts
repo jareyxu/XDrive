@@ -1,7 +1,7 @@
 import { TransferGate } from '../transfers/scheduler'
 import { uploadRequest } from '../transfers/upload-request'
 import { prefetchChunks } from '../transfers/prefetch'
-import { downloadBuffers, downloadDepth, downloadNetwork, uploadNetwork, uploadPipeline, refreshTransferCapabilities, uploadAdaptive, downloadAdaptive } from '../transfers/policy'
+import { downloadBuffers, downloadDepth, downloadNetwork, uploadNetwork, uploadDepth, refreshTransferCapabilities, uploadAdaptive, downloadAdaptive, observeTransfer } from '../transfers/policy'
 import { recordNetworkBytes } from '../transfers/network-meter'
 import { APIError, parseAPIError } from './api-error'
 export { APIError } from './api-error'
@@ -11,6 +11,7 @@ import { planTrashSelection } from '../index/trash-selection'
 import { generateThumbnail } from '../media/generate-thumbnail'
 import { isThumbnailReference, imageDimensions, type SavedThumbnail, type ThumbnailReference } from '../media/thumbnail-schema'
 import { runBoundedTasks, createWriteAheadQueue } from '../uploads/bounded-tasks'
+import { runUploadChunk } from '../uploads/chunk-pipeline'
 import { currentUploadConcurrency } from '../preferences/preferences'
 import { isValidFileName as isValidName, parseFileSelection, parseFolderSelection, validateFolderMerge } from '../uploads/folder-selection'
 import { collectFolderConflicts, conflictIdentity, folderConflictSignature, planFolderConflictChoices, plannedFolderSelection } from '../uploads/folder-conflicts'
@@ -1103,10 +1104,10 @@ async function uploadFileCore(
       entryBase = { ...entryBase, thumbnail: savedThumbnail.reference }
       completed += 1; onProgress(completed, totalSteps)
     }
-    // Capture the preference once. Admission covers plaintext and encryption as
-    // well as PUT, so large inputs cannot queue unbounded encrypted buffers.
+    // Admit bounded ciphertext buffers separately from preparation and network
+    // slots, so preparing the next chunk does not leave the connection idle.
     await refreshTransferCapabilities(signal)
-    await runBoundedTasks(chunkCount, currentUploadConcurrency(), async (index, chunkSignal) => uploadPipeline.run(async () => {
+    await runBoundedTasks(chunkCount, uploadDepth(), async (index, chunkSignal) => {
       if (!record) throw new Error('Upload recovery record missing')
       const prior = record.chunks[index]
       const persisted = prior ? uploaded.get(prior.objectId) : undefined
@@ -1117,42 +1118,47 @@ async function uploadFileCore(
         onProgress(completed, totalSteps, { phase: 'uploading', completedBytes: uploadedContentBytes, totalBytes: file.size })
         return
       }
-      chunkSignal.throwIfAborted()
-      onProgress(completed, totalSteps, { phase: 'encrypting', completedBytes: uploadedContentBytes, totalBytes: file.size })
-      if (persisted) await deletePendingUploadObject(uploadId, persisted.objectId, chunkSignal)
-      let plaintext: Uint8Array | undefined
-      let aad: Uint8Array | undefined
-      let encrypted: Uint8Array | undefined
-      try {
-        const start = index * FILE_CHUNK_BYTES
-        plaintext = takeArrayBufferBytes(await file.slice(start, Math.min(start + FILE_CHUNK_BYTES, file.size)).arrayBuffer())
+      await runUploadChunk(async () => {
         chunkSignal.throwIfAborted()
-        aad = chunkAAD({ fileId, chunkIndex: index, chunkCount, plaintextSize: plaintext.byteLength }, fileCryptoVersion)
-        encrypted = await encryptObject(fileKey, plaintext, aad)
-        chunkSignal.throwIfAborted()
-        const digest = await sha256Hex(encrypted)
-        const piece: UploadPiece = { objectId: randomObjectId(), sizeBytes: encrypted.byteLength, sha256: digest }
-        await writeAhead(async () => {
+        onProgress(completed, totalSteps, { phase: 'encrypting', completedBytes: uploadedContentBytes, totalBytes: file.size })
+        if (persisted) await deletePendingUploadObject(uploadId, persisted.objectId, chunkSignal)
+        let plaintext: Uint8Array | undefined
+        let aad: Uint8Array | undefined
+        let ciphertext: Uint8Array | undefined
+        try {
+          const start = index * FILE_CHUNK_BYTES
+          plaintext = takeArrayBufferBytes(await file.slice(start, Math.min(start + FILE_CHUNK_BYTES, file.size)).arrayBuffer())
           chunkSignal.throwIfAborted()
-          if (!record) throw new Error('Upload recovery record missing')
-          // Build from the latest persisted snapshot inside the queue, never
-          // from a captured older record that can overwrite another chunk.
-          const next = { ...record, chunks: record.chunks.map((existing, part) => part === index ? piece : existing), manifest: null, index: null, trashIndex: null, indexRevision: null, idempotencyKey: null }
-          await saveUploadRecord(vault.vaultKey, next)
-          record = next
-        })
-        chunkSignal.throwIfAborted()
+          const plaintextSize = plaintext.byteLength
+          aad = chunkAAD({ fileId, chunkIndex: index, chunkCount, plaintextSize }, fileCryptoVersion)
+          ciphertext = await encryptObject(fileKey, plaintext, aad)
+          // No plaintext is retained while persisting recovery state or waiting
+          // on the network; the prepared queue holds ciphertext only.
+          plaintext.fill(0); plaintext = undefined
+          chunkSignal.throwIfAborted()
+          const digest = await sha256Hex(ciphertext)
+          const piece: UploadPiece = { objectId: randomObjectId(), sizeBytes: ciphertext.byteLength, sha256: digest }
+          await writeAhead(async () => {
+            chunkSignal.throwIfAborted()
+            if (!record) throw new Error('Upload recovery record missing')
+            const next = { ...record, chunks: record.chunks.map((existing, part) => part === index ? piece : existing), manifest: null, index: null, trashIndex: null, indexRevision: null, idempotencyKey: null }
+            await saveUploadRecord(vault.vaultKey, next)
+            record = next
+          })
+          chunkSignal.throwIfAborted()
+          return { ciphertext, digest, piece, plaintextSize }
+        } catch (error) { ciphertext?.fill(0); throw error }
+        finally { plaintext?.fill(0); aad?.fill(0) }
+      }, async ({ ciphertext, digest, piece, plaintextSize }) => {
         ;(manifestChunks as { objectId: string; sha256: string }[])[index] = { ...manifestChunks[index]!, objectId: piece.objectId, sha256: digest }
         onProgress(completed, totalSteps, { phase: 'uploading', completedBytes: uploadedContentBytes, totalBytes: file.size })
-        await putEncryptedObject(uploadId, piece.objectId, encrypted, digest, chunkSignal, onPutNetworkWaiting)
+        await putEncryptedObject(uploadId, piece.objectId, ciphertext, digest, chunkSignal, onPutNetworkWaiting)
         uploadedObjectIds[index] = piece.objectId
         completed += 1
-        uploadedContentBytes += plaintext.byteLength
+        uploadedContentBytes += plaintextSize
         onProgress(completed, totalSteps, { phase: 'uploading', completedBytes: uploadedContentBytes, totalBytes: file.size })
-      } finally {
-        plaintext?.fill(0); aad?.fill(0); encrypted?.fill(0)
-      }
-    }, chunkSignal), signal)
+      }, chunkSignal)
+    }, signal)
 
     const isCommitConflict = (error: unknown) => error instanceof APIError && error.status === 409 && ['vault_mutation_conflict', 'global_revision_conflict', 'metadata_revision_conflict'].includes(error.code)
     onProgress(completed, totalSteps, { phase: 'committing', completedBytes: uploadedContentBytes, totalBytes: file.size })
@@ -2358,7 +2364,7 @@ async function requestArrayBuffer(path: string, maxBytes = 16 * 1024 * 1024, sig
         if (result.value.byteLength > contentLength - offset) throw new TypeError('encrypted object size does not match its response header')
         buffer.set(result.value, offset)
         recordNetworkBytes('download', result.value.byteLength)
-        downloadAdaptive.observe(result.value.byteLength)
+        observeTransfer('download', result.value.byteLength)
         offset += result.value.byteLength
         onProgress?.(offset, contentLength)
       }

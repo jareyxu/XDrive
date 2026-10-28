@@ -7,12 +7,17 @@ import { APIError } from '../api/api-error'
 import { effectiveBackupReminderDays, backupIsOverdue, setPreferences, usePreferences } from '../preferences/preferences'
 import { clearWallpaper, chooseBuiltinWallpaper, MAX_WALLPAPER_BYTES, saveWallpaper, useWallpaper, WALLPAPER_TYPES } from '../preferences/wallpaper'
 import { BUILTIN_WALLPAPERS } from '../preferences/builtin-wallpapers'
+import { confirmedTransferCapabilities, refreshTransferCapabilities } from '../transfers/policy'
+import { recommendedDownloadMemory, transferCeilings, type TransferCapabilities } from '../transfers/limits'
 import styles from './SettingsScreen.module.css'
 
 export function SettingsScreen(props: { now: number; revision: number; onChangePassword: () => void; passwordDisabled: boolean; active?: boolean; onUpdateNotice?: (message: string, isError: boolean) => void; storageContent?: ReactNode; category?: string; onCategoryChange?: (category: string) => void }) {
   const onUpdateNotice = props.onUpdateNotice
   const preferences = usePreferences()
   const wallpaper = useWallpaper()
+  const [transferCapabilities, setTransferCapabilities] = useState<TransferCapabilities | null>(confirmedTransferCapabilities)
+  const transferLimits = transferCeilings(preferences, transferCapabilities ?? undefined)
+  const recommendedMemory = recommendedDownloadMemory(preferences.downloadConcurrency ?? 4)
   const wallpaperInput = useRef<HTMLInputElement>(null)
   const [usage, setUsage] = useState<StorageUsage | null>(null)
   const [info, setInfo] = useState<SystemInfo | null>(null)
@@ -34,6 +39,14 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
   const [wallpaperError, setWallpaperError] = useState('')
   const activeCategory = props.category ?? localCategory
   const setActiveCategory = props.onCategoryChange ?? setLocalCategory
+  useEffect(() => {
+    if (props.active === false || activeCategory !== 'transfer') return
+    const controller = new AbortController()
+    void refreshTransferCapabilities(controller.signal).then(() => {
+      if (!controller.signal.aborted) setTransferCapabilities(confirmedTransferCapabilities())
+    }).catch(() => undefined)
+    return () => controller.abort()
+  }, [props.active, activeCategory])
   useEffect(() => {
     if (props.active === false) return
     const controller = new AbortController()
@@ -205,11 +218,13 @@ export function SettingsScreen(props: { now: number; revision: number; onChangeP
     <section className={styles.group} hidden={activeCategory !== 'transfer'} aria-labelledby="transfer-title">
       <h2 id="transfer-title">传输</h2>
       <div className={styles.row}><label htmlFor="auto-transfer">自动优化并发</label><span className={styles.switchControl}><input id="auto-transfer" className={styles.toggle} role="switch" type="checkbox" checked={preferences.autoTransfer ?? true} onChange={event => setPreferences({ autoTransfer: event.target.checked })} /><span className={styles.switchTrack} aria-hidden="true" /></span></div>
-      <p className={styles.help}>从较低并发开始，根据传输表现调整；服务器限制始终有效。设置在本浏览器保存。</p>
+      <p className={styles.help}>从最多 4 路开始，根据实际传输表现调整；遇到拥塞会降低并发。服务器限制和内存预算始终有效，设置在本浏览器保存。</p>
       <div className={styles.row}><label htmlFor="upload-concurrency">上传最大并发</label><select id="upload-concurrency" value={preferences.uploadConcurrency} onChange={event => setPreferences({ uploadConcurrency: Number(event.target.value) })}>{[1, 2, 3, 4, 5, 6, 7, 8].map(count => <option key={count} value={count}>{count} 个分块</option>)}</select></div>
       <div className={styles.row}><label htmlFor="download-concurrency">下载最大并发</label><select id="download-concurrency" value={preferences.downloadConcurrency ?? 4} onChange={event => setPreferences({ downloadConcurrency: Number(event.target.value) })}>{[1, 2, 3, 4, 5, 6, 7, 8].map(count => <option key={count} value={count}>{count} 个分块</option>)}</select></div>
       <div className={styles.row}><label htmlFor="download-memory">下载流水线预算</label><select id="download-memory" value={preferences.downloadMemoryMiB ?? 64} onChange={event => setPreferences({ downloadMemoryMiB: Number(event.target.value) })}>{[64, 128, 256].map(size => <option key={size} value={size}>{size} MiB</option>)}</select></div>
-      <p className={styles.help}>预算用于限制预取分块，不包含浏览器、视频预览和内存下载的总占用。手机建议保持默认；预取窗口从下一次下载生效。</p>
+      <p className={styles.help} role="status">可用并发上限：上传 {transferLimits.upload} 路，下载 {transferLimits.download} 路。{transferCapabilities ? `服务器上限：上传 ${transferCapabilities.uploadConcurrency} 路，下载 ${transferCapabilities.downloadConcurrency} 路。` : '尚未确认服务器上限，暂按保守值估算。'}自动模式可能低于此上限。</p>
+      {transferLimits.bufferSlots < (preferences.downloadConcurrency ?? 4) && <div className={styles.row}><div>下载受内存预算限制<small>当前预算最多支持 {transferLimits.bufferSlots} 个分块；要容纳所选并发，至少需要 {recommendedMemory} MiB。服务器上限仍然有效。</small></div><button type="button" className="quiet-button" onClick={() => setPreferences({ downloadMemoryMiB: recommendedMemory })}>调整预算为 {recommendedMemory} MiB</button></div>}
+      <p className={styles.help}>预算用于限制预取分块，不包含浏览器、视频预览和内存下载的总占用。手机可保持 64 MiB；4 路下载需 128 MiB，8 路需 256 MiB。预取窗口从下一次下载生效。上传选择 1–2 路可降低内存占用；更高并发会在最多 8 个分块内提前准备下一块。</p>
       <button type="button" className="quiet-button" onClick={() => setPreferences({ autoTransfer: true, uploadConcurrency: 4, downloadConcurrency: 4, downloadMemoryMiB: 64 })}>恢复传输默认设置</button>
     </section>
     <section className={styles.group} hidden={activeCategory !== 'security'} aria-labelledby="security-title"><h2 id="security-title">安全</h2><div className={styles.row}><div>修改密码<small>修改密码不会更换主密钥。忘记密码无法恢复数据。</small></div><button className="toolbar-button" type="button" disabled={props.passwordDisabled} onClick={props.onChangePassword}>修改密码</button></div><p className={styles.help}>无操作 10 分钟后自动锁定；实际上传、下载和视频播放期间按任务状态延后锁定。</p></section>

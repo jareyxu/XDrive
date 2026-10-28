@@ -95,6 +95,9 @@
 .sidebar-shortcuts > button { display: flex; min-height: 38px; align-items: center; gap: 8px; padding: 0 9px; border-radius: 8px; background: transparent; color: var(--label-2); text-align: left; font-size: 12px; }
 .sidebar-shortcuts > button:hover { background: var(--fill-1); color: var(--label-1); }
 .drive-main { min-height: 0; height: 100%; overflow: auto; overscroll-behavior: contain; background: var(--surface-content); }
+.drive-main.is-folder-loading { display: flex; flex-direction: column; }
+.is-folder-loading > .directory-summary { display: none; }
+.folder-loading-state { display: grid; min-height: 0; flex: 1; place-items: center; margin: 0; padding: 24px; color: color-mix(in srgb, var(--label-1) 60%, transparent); text-align: center; }
 .settings-window-content { min-height: 100%; }
 .drive-toolbar { position: sticky; top: 0; min-height: 58px; gap: 8px; padding: 7px 18px; background: var(--surface-thick); }
 .drive-toolbar .toolbar-actions { flex: 0 0 auto; gap: 5px; }
