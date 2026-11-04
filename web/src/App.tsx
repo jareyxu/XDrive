@@ -1,3 +1,4 @@
+import { mediaPreviewKind, previewNeighbors, previewArrowDirection } from './media/preview-navigation'
 import { Breadcrumbs } from './components/Breadcrumbs'
 import { RequestIdControl } from './components/RequestIdControl'
 import { useErrorNotice } from './components/use-error-notice'
@@ -37,7 +38,7 @@ import { useLocation, useNavigate } from 'react-router'
 import { browserMutations } from './index/browser-coordination'
 import type { WriterState } from './index/mutation-coordinator'
 import type { DragEvent as ReactDragEvent, MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent, FormEvent, ReactNode } from 'react'
-import { Archive, ArrowDownToLine, ArrowUpFromLine, Bell, ChevronDown, CornerUpLeft, File, FilePenLine, Folder, FolderPlus, HardDrive, LockKeyhole, LogOut, MoveRight, ShieldCheck, Trash2, RotateCcw, LayoutGrid, List, MoreHorizontal, Settings, Square, Minus, Copy, Home, ArrowUp, ArrowDown, X } from 'lucide-react'
+import { Archive, ArrowDownToLine, ArrowUpFromLine, Bell, ChevronLeft, ChevronRight, ChevronDown, CornerUpLeft, File, FilePenLine, Folder, FolderPlus, HardDrive, LockKeyhole, LogOut, MoveRight, ShieldCheck, Trash2, RotateCcw, LayoutGrid, List, MoreHorizontal, Settings, Square, Minus, Copy, Home, ArrowUp, ArrowDown, X } from 'lucide-react'
 import {
   APIError,
   SetupCommittedError,
@@ -113,6 +114,8 @@ interface PreviewState {
   readonly isHeic?: boolean
   readonly heicFallbackAttempted?: boolean
   readonly heicDecoding?: boolean
+  readonly loading?: boolean
+  readonly loadError?: string
   readonly imageError?: string
 }
 
@@ -807,6 +810,12 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
       setUploadError('此文件类型暂不支持预览，请下载后打开。')
       return
     }
+    if (preview?.url) {
+      URL.revokeObjectURL(preview.url)
+      downloadURLs.current.delete(preview.url)
+    }
+    const mediaKind = mediaPreviewKind(entry)
+    setPreview(mediaKind ? { entry, kind: mediaKind, loading: true } : null)
     const controller = new AbortController()
     const request = { controller, entry }
     previewRequest.current = request
@@ -851,13 +860,23 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
       setUploadMessage('')
     } catch (cause) {
       if (!ownsPreview()) return
-      if (!(cause instanceof DOMException && cause.name === 'AbortError')) setUploadError(cause instanceof Error ? cause.message : '无法预览此文件。', cause)
+      if (!(cause instanceof DOMException && cause.name === 'AbortError')) {
+        const message = cause instanceof Error ? cause.message : '无法预览此文件。'
+        setUploadError(message, cause)
+        if (mediaKind) setPreview({ entry, kind: mediaKind, loadError: message })
+      }
       setUploadMessage('')
     } finally {
       taskControllers.current.delete(controller)
       if (previewRequest.current === request) previewRequest.current = null
     }
   }
+  const previewEntries = activeView === 'trash'
+    ? activeTrashRoot
+      ? [...(trashDirectory?.entries ?? [])].sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'))
+      : props.vault.trashEntries.map(item => item.item)
+    : entries
+  const neighbors = preview ? previewNeighbors(previewEntries, preview.entry.entryId) : { previous: undefined, next: undefined }
   const closePreview = () => {
     cancelPendingPreview()
     if (preview?.url) {
@@ -1776,7 +1795,7 @@ function DriveScreen(props: { vault: UnlockedVault; holdIdleLock: (kind: IdleLoc
       if (action === 'download') void handleDownload(entry)
     }} />}
     {clearTrashIds && <ClearTrashDialog selected={clearTrashMode === 'selected'} count={clearTrashIds.length} onConfirm={() => void handleClearTrash()} onCancel={closeClearTrash} />}
-    {preview && <PreviewDialog preview={preview} vault={props.vault} holdIdleLock={props.holdIdleLock} onClose={closePreview} onImageError={handlePreviewImageError} onDownload={() => void handleDownload(preview.entry)} />}
+    {preview && <PreviewDialog preview={preview} vault={props.vault} holdIdleLock={props.holdIdleLock} onClose={closePreview} onImageError={handlePreviewImageError} onPrevious={neighbors.previous ? () => void handlePreview(neighbors.previous!) : undefined} onNext={neighbors.next ? () => void handlePreview(neighbors.next!) : undefined} onDownload={() => void handleDownload(preview.entry)} />}
     {changePasswordOpen && <ChangePasswordDialog vault={props.vault} onClose={() => setChangePasswordOpen(false)} onChanged={(updated) => { props.onVaultUpdate(updated); setChangePasswordOpen(false); setUploadMessage('密码已修改。其他设备上的登录已失效。') }} />}
     {deleteSelections && <DeleteSelectionDialog count={deleteSelections.length} onCancel={closeDeleteSelection} onConfirm={() => void handleDeleteSelection()} />}
     {movingSelections.length > 0 && <MoveDialog vault={props.vault} selections={movingSelections} entries={movingSelections.map((item) => item.entry)} onClose={() => setMovingSelections([])} onMove={handleMoveToTarget} />}
@@ -1883,14 +1902,27 @@ function TrashView(props: {
   </>
 }
 
-function PreviewDialog(props: { preview: PreviewState; vault: UnlockedVault; holdIdleLock: (kind: IdleLockTask) => () => void; onClose: () => void; onImageError: (preview: PreviewState) => void; onDownload: () => void }) {
+function PreviewDialog(props: { preview: PreviewState; vault: UnlockedVault; holdIdleLock: (kind: IdleLockTask) => () => void; onClose: () => void; onImageError: (preview: PreviewState) => void; onDownload: () => void; onPrevious?: () => void; onNext?: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     const element = dialog.current
     if (element && !element.open) element.showModal()
   }, [])
-  return <dialog ref={dialog} className="preview-dialog" aria-label={`预览 ${props.preview.entry.name}`} onClose={props.onClose} onCancel={(event) => { event.preventDefault(); props.onClose() }}>
+  const media = props.preview.kind === 'image' || props.preview.kind === 'video'
+  return <dialog onKeyDown={event => {
+    if (!media) return
+    const direction = previewArrowDirection(event)
+    if (!direction) return
+    event.preventDefault(); event.stopPropagation()
+    if (!event.repeat) (direction === 'previous' ? props.onPrevious : props.onNext)?.()
+  }} ref={dialog} className="preview-dialog" aria-label={`预览 ${props.preview.entry.name}`} onClose={props.onClose} onCancel={(event) => { event.preventDefault(); props.onClose() }}>
     <header><strong>{props.preview.entry.name}</strong><button className="quiet-button" onClick={props.onDownload}>下载原文件</button><button className="icon-button preview-close-button" aria-label="关闭预览" onClick={props.onClose}><X size={17} /></button></header>
+    {media && <nav className="preview-navigation" aria-label="切换媒体预览">
+      <button type="button" className="icon-button" aria-label="上一个图片或视频" title="上一个（←）" disabled={!props.onPrevious} onClick={props.onPrevious}><ChevronLeft size={24} /></button>
+      <button type="button" className="icon-button" aria-label="下一个图片或视频" title="下一个（→）" disabled={!props.onNext} onClick={props.onNext}><ChevronRight size={24} /></button>
+    </nav>}
+    {props.preview.loading && <p className="preview-loading" role="status">正在读取预览…</p>}
+    {props.preview.loadError && <p role="alert">{props.preview.loadError}</p>}
     {props.preview.kind === 'text' && <pre className="preview-text">{props.preview.text}</pre>}
     {props.preview.kind === 'markdown' && <Suspense fallback={<p role="status">正在加载 Markdown 预览…</p>}><MarkdownPreview source={props.preview.text ?? ''} /></Suspense>}
     {props.preview.kind === 'code' && <Suspense fallback={<p role="status">正在加载代码预览…</p>}><CodePreview key={props.preview.entry.entryId} source={props.preview.text ?? ''} name={props.preview.entry.name} mime={props.preview.entry.mime ?? ''} /></Suspense>}
@@ -1899,7 +1931,7 @@ function PreviewDialog(props: { preview: PreviewState; vault: UnlockedVault; hol
       {props.preview.heicDecoding && <p role="status">正在本机解码 HEIC 图片…</p>}
       {props.preview.imageError && <p role="alert">{props.preview.imageError}</p>}
     </>}
-    {props.preview.kind === 'video' && <VideoPreview key={props.preview.entry.entryId} vault={props.vault} entry={props.preview.entry} holdIdleLock={props.holdIdleLock} />}
+    {props.preview.kind === 'video' && !props.preview.loading && !props.preview.loadError && <VideoPreview key={props.preview.entry.entryId} vault={props.vault} entry={props.preview.entry} holdIdleLock={props.holdIdleLock} />}
     {props.preview.kind === 'pdf' && <PDFPreview vault={props.vault} entry={props.preview.entry} />}
   </dialog>
 }
